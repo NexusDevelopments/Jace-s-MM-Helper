@@ -14,6 +14,7 @@ const {
 
 const LIGHT_BLUE = 0x87cefa;
 const PREFIX = 'j$';
+const OWNER_ID = '1435310225010987088';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const ALLOWED_ROLE_IDS = (process.env.ALLOWED_ROLE_IDS || '')
@@ -57,7 +58,8 @@ function makeBar(done, total, width = 20) {
   return `${bar} ${percent}%`;
 }
 
-function hasAllowedRole(member) {
+function hasAllowedRole(member, userId) {
+  if (userId === OWNER_ID) return true;
   if (!ALLOWED_ROLE_IDS.length) return true;
   return member.roles.cache.some((role) => ALLOWED_ROLE_IDS.includes(role.id));
 }
@@ -144,7 +146,7 @@ client.on('messageCreate', async (message) => {
   const content = message.content.trim().toLowerCase();
   if (!content.startsWith(`${PREFIX}demo`)) return;
 
-  if (!hasAllowedRole(message.member)) {
+  if (!hasAllowedRole(message.member, message.author.id)) {
     await message.reply('You do not have access to this command.');
     return;
   }
