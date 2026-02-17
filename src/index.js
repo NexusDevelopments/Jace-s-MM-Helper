@@ -750,6 +750,7 @@ app.get('/api/bot/status', (req, res) => {
       online: false,
       uptime: 0,
       username: null,
+      botId: null,
       guilds: 0,
       ping: null
     });
@@ -761,6 +762,7 @@ app.get('/api/bot/status', (req, res) => {
     online: true,
     uptime: uptime,
     username: client.user.tag,
+    botId: client.user.id,
     guilds: client.guilds.cache.size,
     ping: client.ws.ping
   });

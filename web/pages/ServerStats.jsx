@@ -90,6 +90,7 @@ function ServerStats() {
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
             <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Home</Link>
             <Link to="/botstatus" style={{ color: '#fff', textDecoration: 'none' }}>Bot Status</Link>
+            <Link to="/invite" style={{ color: '#fff', textDecoration: 'none' }}>Invite Bot</Link>
           </div>
         </div>
 

@@ -33,6 +33,9 @@ function HomePage() {
             <Link to="/serverstats" className="btn">
               Server Stats
             </Link>
+            <Link to="/invite" className="btn">
+              Invite Bot
+            </Link>
           </div>
         </div>
       </div>

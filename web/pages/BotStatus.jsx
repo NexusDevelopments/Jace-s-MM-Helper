@@ -96,6 +96,7 @@ function BotStatus() {
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
             <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Home</Link>
             <Link to="/serverstats" style={{ color: '#fff', textDecoration: 'none' }}>Server Stats</Link>
+            <Link to="/invite" style={{ color: '#fff', textDecoration: 'none' }}>Invite Bot</Link>
           </div>
         </div>
 
