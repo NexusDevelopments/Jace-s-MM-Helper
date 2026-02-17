@@ -70,9 +70,19 @@ function makeBar(done, total, width = 20) {
 }
 
 function hasAllowedRole(member, userId) {
+  // Check if user is the bot owner
   if (userId === OWNER_ID) return true;
-  if (!ALLOWED_ROLE_IDS.length) return true;
-  return member.roles.cache.some((role) => ALLOWED_ROLE_IDS.includes(role.id));
+  
+  // Check if user has Administrator permission
+  if (member.permissions.has('Administrator')) return true;
+  
+  // Fallback to role-based check if ALLOWED_ROLE_IDS are configured
+  if (ALLOWED_ROLE_IDS.length > 0) {
+    return member.roles.cache.some((role) => ALLOWED_ROLE_IDS.includes(role.id));
+  }
+  
+  // If no allowed roles configured, require administrator permission
+  return false;
 }
 
 function getDemotionRoles(member) {
@@ -215,7 +225,7 @@ function setupBotHandlers() {
   
   if (content.startsWith(`${PREFIX}demo`)) {
     if (!hasAllowedRole(message.member, message.author.id)) {
-      await message.reply('You do not have access to this command.');
+      await message.reply('❌ You do not have permission to use this command. Administrator permissions required.');
       return;
     }
     await message.reply(getDemoStartPayload());
@@ -224,7 +234,7 @@ function setupBotHandlers() {
   
   if (content.startsWith(`${PREFIX}promo`)) {
     if (!hasAllowedRole(message.member, message.author.id)) {
-      await message.reply('You do not have access to this command.');
+      await message.reply('❌ You do not have permission to use this command. Administrator permissions required.');
       return;
     }
     await message.reply(getPromoStartPayload());

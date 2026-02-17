@@ -1,6 +1,29 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 function Tickets() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading
+    const timer = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return (
+      <>
+        <div className="animated-bg"></div>
+        <div className="container">
+          <div className="loading">
+            <div className="spinner"></div>
+            <div>Loading...</div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="animated-bg"></div>

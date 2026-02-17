@@ -1,6 +1,29 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 function HomePage() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate brief loading for consistent UX
+    const timer = setTimeout(() => setLoading(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return (
+      <>
+        <div className="animated-bg"></div>
+        <div className="container">
+          <div className="loading">
+            <div className="spinner"></div>
+            <div>Loading...</div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="animated-bg"></div>
