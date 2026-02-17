@@ -246,3 +246,218 @@ body {
     padding: 16px;
   }
 }
+
+/* Background Bubbles */
+.background-bubbles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bubble {
+  position: absolute;
+  bottom: -100px;
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: rise 15s infinite ease-in;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bubble:nth-child(2) { width: 60px; height: 60px; animation-delay: 2s; }
+.bubble:nth-child(3) { width: 30px; height: 30px; animation-delay: 4s; }
+.bubble:nth-child(4) { width: 80px; height: 80px; animation-delay: 0s; }
+.bubble:nth-child(5) { width: 50px; height: 50px; animation-delay: 6s; }
+.bubble:nth-child(6) { width: 35px; height: 35px; animation-delay: 3s; }
+.bubble:nth-child(7) { width: 70px; height: 70px; animation-delay: 7s; }
+.bubble:nth-child(8) { width: 45px; height: 45px; animation-delay: 1s; }
+.bubble:nth-child(9) { width: 55px; height: 55px; animation-delay: 5s; }
+.bubble:nth-child(10) { width: 65px; height: 65px; animation-delay: 8s; }
+
+@keyframes rise {
+  0% {
+    bottom: -100px;
+    transform: translateX(0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    bottom: 110%;
+    transform: translateX(calc(50vw - 50%)) scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* Animated Grid Lines */
+.grid-lines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  opacity: 0.1;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: gridMove 20s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes gridMove {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(50px, 50px);
+  }
+}
+
+/* Glassy Home Buttons */
+.home-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 25px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  color: #fff;
+  text-decoration: none;
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.home-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.6s;
+}
+
+.home-btn:hover::before {
+  left: 100%;
+}
+
+.home-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.home-btn:active {
+  transform: translateY(-2px) scale(1);
+}
+
+.btn-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 10px rgba(255, 255, 255, 0.3));
+  animation: floatIcon 3s ease-in-out infinite;
+}
+
+@keyframes floatIcon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.btn-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 4px;
+}
+
+.btn-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.btn-subtitle {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+.btn-arrow {
+  font-size: 1.5rem;
+  opacity: 0.5;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.home-btn:hover .btn-arrow {
+  opacity: 1;
+  transform: translateX(5px);
+}
+
+.btn-glass {
+  animation: fadeInUp 0.6s ease-out backwards;
+}
+
+.btn-glass:nth-child(1) { animation-delay: 0.1s; }
+.btn-glass:nth-child(2) { animation-delay: 0.2s; }
+.btn-glass:nth-child(3) { animation-delay: 0.3s; }
+.btn-glass:nth-child(4) { animation-delay: 0.4s; }
+.btn-glass:nth-child(5) { animation-delay: 0.5s; }
+.btn-glass:nth-child(6) { animation-delay: 0.6s; }
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile Responsive for Home Buttons */
+@media (max-width: 768px) {
+  .home-btn {
+    padding: 18px 20px;
+  }
+  
+  .btn-icon {
+    font-size: 1.8rem;
+  }
+  
+  .btn-title {
+    font-size: 1rem;
+  }
+  
+  .btn-subtitle {
+    font-size: 0.8rem;
+  }
+}
