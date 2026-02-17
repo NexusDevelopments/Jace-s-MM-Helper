@@ -29,6 +29,8 @@ const SESSION_TTL_MS = 10 * 60 * 1000;
 
 const sessions = new Map();
 let botStartTime = null;
+let serverStartTime = Date.now();
+let autoStarted = false;
 let client = null;
 let sessionCleanupInterval = null;
 
@@ -726,18 +728,24 @@ if (!BOT_TOKEN) {
   throw new Error('Missing BOT_TOKEN in env.');
 }
 
-// Initialize the client (but don't start it automatically)
-// Bot can be controlled via the web interface at /botstatus
+// Initialize the client (bot auto-starts on server launch)
+// This ensures the bot is always online when Railway/server restarts
 client = createClient();
 setupBotHandlers();
 
-// Auto-start bot if AUTO_START environment variable is set to 'true'
-if (process.env.AUTO_START === 'true') {
+// Auto-start bot on server launch (default behavior)
+const shouldAutoStart = process.env.AUTO_START !== 'false';
+
+if (shouldAutoStart) {
   client.login(BOT_TOKEN).then(() => {
     console.log('Bot auto-started on server launch');
+    autoStarted = true;
   }).catch((error) => {
     console.error('Failed to auto-start bot:', error);
+    autoStarted = false;
   });
+} else {
+  console.log('Auto-start disabled. Use web interface to start bot.');
 }
 
 // Express Web Server
@@ -761,7 +769,9 @@ app.get('/api/bot/status', (req, res) => {
       username: null,
       botId: null,
       guilds: 0,
-      ping: null
+      ping: null,
+      serverStartTime: serverStartTime,
+      autoStarted: autoStarted
     });
   }
 
@@ -773,7 +783,9 @@ app.get('/api/bot/status', (req, res) => {
     username: client.user.tag,
     botId: client.user.id,
     guilds: client.guilds.cache.size,
-    ping: client.ws.ping
+    ping: client.ws.ping,
+    serverStartTime: serverStartTime,
+    autoStarted: autoStarted
   });
 });
 

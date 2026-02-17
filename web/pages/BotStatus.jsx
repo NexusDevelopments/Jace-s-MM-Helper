@@ -71,6 +71,19 @@ function BotStatus() {
     return `${secs}s`;
   };
 
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return '--';
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+
   if (loading) {
     return (
       <>
@@ -162,6 +175,34 @@ function BotStatus() {
               </div>
             </div>
           </div>
+
+          {status?.serverStartTime && (
+            <div style={{ 
+              marginTop: '1.5rem',
+              padding: '1rem', 
+              background: 'rgba(135, 206, 250, 0.05)',
+              borderRadius: '8px',
+              border: '1px solid rgba(135, 206, 250, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{ 
+                fontSize: '1.5rem',
+                opacity: 0.7
+              }}>
+                ⟳
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.75rem', opacity: 0.8, marginBottom: '4px' }}>
+                  {status?.autoStarted ? 'AUTO-STARTED ON SERVER RESTART' : 'SERVER STARTED'}
+                </div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600' }}>
+                  {formatTimestamp(status.serverStartTime)}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="card slide-in" style={{ animationDelay: '0.1s' }}>
