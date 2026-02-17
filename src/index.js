@@ -29,15 +29,19 @@ const SESSION_TTL_MS = 10 * 60 * 1000;
 
 const sessions = new Map();
 let botStartTime = null;
+let client = null;
+let sessionCleanupInterval = null;
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
+function createClient() {
+  return new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent
+    ]
+  });
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -181,21 +185,28 @@ function getPromoStartPayload() {
   return { embeds: [embed], components: [row] };
 }
 
-client.once('ready', () => {
-  botStartTime = Date.now();
-  console.log(`Bot online as ${client.user.tag}`);
+function setupBotHandlers() {
+  client.removeAllListeners();
 
-  setInterval(() => {
-    const now = Date.now();
-    for (const [userId, session] of sessions.entries()) {
-      if (now - session.createdAt > SESSION_TTL_MS) {
-        sessions.delete(userId);
-      }
+  client.once('ready', () => {
+    botStartTime = Date.now();
+    console.log(`Bot online as ${client.user.tag}`);
+
+    if (sessionCleanupInterval) {
+      clearInterval(sessionCleanupInterval);
     }
-  }, 60 * 1000);
-});
 
-client.on('messageCreate', async (message) => {
+    sessionCleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [userId, session] of sessions.entries()) {
+        if (now - session.createdAt > SESSION_TTL_MS) {
+          sessions.delete(userId);
+        }
+      }
+    }, 60 * 1000);
+  });
+
+  client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.inGuild()) return;
 
   const content = message.content.trim().toLowerCase();
@@ -643,12 +654,81 @@ client.on('interactionCreate', async (interaction) => {
       }).catch(() => null);
     }
   }
-});
+  });
+}
+
+async function startBot() {
+  if (client && client.isReady()) {
+    console.log('Bot is already running');
+    return { success: false, message: 'Bot is already online' };
+  }
+
+  try {
+    if (client) {
+      await client.destroy().catch(() => {});
+    }
+    
+    client = createClient();
+    setupBotHandlers();
+    await client.login(BOT_TOKEN);
+    
+    console.log('Bot started successfully');
+    return { success: true, message: 'Bot started successfully' };
+  } catch (error) {
+    console.error('Failed to start bot:', error);
+    return { success: false, message: error.message || 'Failed to start bot' };
+  }
+}
+
+async function stopBot() {
+  if (!client || !client.isReady()) {
+    console.log('Bot is not running');
+    return { success: false, message: 'Bot is not online' };
+  }
+
+  try {
+    if (sessionCleanupInterval) {
+      clearInterval(sessionCleanupInterval);
+      sessionCleanupInterval = null;
+    }
+    
+    await client.destroy();
+    botStartTime = null;
+    
+    console.log('Bot stopped successfully');
+    return { success: true, message: 'Bot stopped successfully' };
+  } catch (error) {
+    console.error('Failed to stop bot:', error);
+    return { success: false, message: error.message || 'Failed to stop bot' };
+  }
+}
+
+async function restartBot() {
+  if (!client || !client.isReady()) {
+    return await startBot();
+  }
+
+  try {
+    console.log('Restarting bot...');
+    await stopBot();
+    
+    // Wait a moment before restarting
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    return await startBot();
+  } catch (error) {
+    console.error('Failed to restart bot:', error);
+    return { success: false, message: error.message || 'Failed to restart bot' };
+  }
+}
 
 if (!BOT_TOKEN) {
   throw new Error('Missing BOT_TOKEN in env.');
 }
 
+// Initialize and start the bot
+client = createClient();
+setupBotHandlers();
 client.login(BOT_TOKEN);
 
 // Express Web Server
@@ -665,7 +745,7 @@ app.get('/api/health', (req, res) => {
 
 // API: Bot status
 app.get('/api/bot/status', (req, res) => {
-  if (!client.isReady()) {
+  if (!client || !client.isReady()) {
     return res.json({
       online: false,
       uptime: 0,
@@ -687,8 +767,9 @@ app.get('/api/bot/status', (req, res) => {
 });
 
 // API: Server statistics
+// API: Server statistics
 app.get('/api/servers', async (req, res) => {
-  if (!client.isReady()) {
+  if (!client || !client.isReady()) {
     return res.json({
       success: false,
       message: 'Bot is not online'
@@ -779,54 +860,17 @@ app.post('/api/bot/control', async (req, res) => {
   }
 
   try {
-    if (action === 'stop') {
-      res.json({
-        success: true,
-        message: 'Bot is shutting down...'
-      });
-      
-      await client.destroy();
-      botStartTime = null;
-      
-      // Note: In production, you'd use PM2 or a process manager
-      // This is a graceful shutdown but won't restart automatically
-      setTimeout(() => {
-        console.log('Bot stopped via web interface');
-      }, 1000);
-      
-    } else if (action === 'start') {
-      if (client.isReady()) {
-        return res.json({
-          success: false,
-          message: 'Bot is already online'
-        });
-      }
-      
-      await client.login(BOT_TOKEN);
-      
-      res.json({
-        success: true,
-        message: 'Bot is starting...'
-      });
-      
+    let result;
+    
+    if (action === 'start') {
+      result = await startBot();
+    } else if (action === 'stop') {
+      result = await stopBot();
     } else if (action === 'restart') {
-      res.json({
-        success: true,
-        message: 'Bot is restarting...'
-      });
-      
-      await client.destroy();
-      botStartTime = null;
-      
-      setTimeout(async () => {
-        try {
-          await client.login(BOT_TOKEN);
-          console.log('Bot restarted via web interface');
-        } catch (error) {
-          console.error('Failed to restart bot:', error);
-        }
-      }, 2000);
+      result = await restartBot();
     }
+
+    res.json(result);
   } catch (error) {
     console.error('Control error:', error);
     res.status(500).json({
