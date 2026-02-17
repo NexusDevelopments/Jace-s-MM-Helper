@@ -906,58 +906,55 @@ app.post('/api/bot/control', async (req, res) => {
 // API: Get list of source files
 app.get('/api/source/files', (req, res) => {
   try {
-    const srcDir = path.join(__dirname);
-    const webDir = path.join(__dirname, '..', 'web');
     const rootDir = path.join(__dirname, '..');
-
     const files = [];
 
-    // Get all files recursively
+    // Get all files recursively from the entire project
     function getFiles(dir, basePath = '') {
-      const items = fs.readdirSync(dir);
+      let items;
+      try {
+        items = fs.readdirSync(dir);
+      } catch (error) {
+        // Skip directories we can't read
+        return;
+      }
       
       items.forEach(item => {
         const fullPath = path.join(dir, item);
-        const relativePath = path.join(basePath, item);
-        const stat = fs.statSync(fullPath);
+        const relativePath = basePath ? path.join(basePath, item) : item;
         
-        // Skip node_modules, dist, .git, and other build folders
+        let stat;
+        try {
+          stat = fs.statSync(fullPath);
+        } catch (error) {
+          // Skip files we can't stat
+          return;
+        }
+        
+        // Skip node_modules, dist, .git, and other build/dependency folders
         if (item === 'node_modules' || item === 'dist' || item === '.git' || 
-            item === '.vscode' || item === 'build' || item.startsWith('.')) {
+            item === '.vscode' || item === 'build' || item === 'coverage' ||
+            item === 'out' || item === 'target' || item === '.next' ||
+            item === '.cache' || item === 'tmp' || item === 'temp') {
           return;
         }
         
         if (stat.isDirectory()) {
           getFiles(fullPath, relativePath);
         } else if (stat.isFile()) {
-          // Only include code-related files
-          const ext = path.extname(item);
-          if (['.js', '.jsx', '.json', '.css', '.html', '.md', '.txt', '.yml', '.yaml', '.cjs'].includes(ext)) {
-            files.push(relativePath);
-          }
+          // Include ALL files (not just specific extensions)
+          files.push(relativePath);
         }
       });
     }
 
-    // Get files from different directories
-    getFiles(srcDir, 'src');
-    if (fs.existsSync(webDir)) {
-      getFiles(webDir, 'web');
-    }
-    
-    // Add important root files
-    const rootFiles = ['package.json', 'README.md', 'Dockerfile', '.gitignore', 'ecosystem.config.cjs'];
-    rootFiles.forEach(file => {
-      const filePath = path.join(rootDir, file);
-      if (fs.existsSync(filePath)) {
-        files.push(file);
-      }
-    });
+    // Scan entire project from root
+    getFiles(rootDir);
 
     // Sort files alphabetically
     files.sort();
 
-    res.json({ success: true, files });
+    res.json({ success: true, files, totalFiles: files.length });
   } catch (error) {
     console.error('Error listing files:', error);
     res.status(500).json({ success: false, message: 'Failed to list files' });

@@ -8,9 +8,11 @@ function SourceCode() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [files, setFiles] = useState([]);
+  const [totalFiles, setTotalFiles] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // Check if already authenticated in session
@@ -48,10 +50,17 @@ function SourceCode() {
       const data = await response.json();
       if (data.success) {
         setFiles(data.files);
+        setTotalFiles(data.totalFiles || data.files.length);
       }
     } catch (error) {
       console.error('Error fetching file list:', error);
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchFileList();
+    setTimeout(() => setRefreshing(false), 500);
   };
 
   const fetchFileContent = async (filePath) => {
@@ -70,12 +79,20 @@ function SourceCode() {
   };
 
   const getFileIcon = (filename) => {
-    if (filename.endsWith('.js') || filename.endsWith('.jsx')) return '{ }';
-    if (filename.endsWith('.json')) return '[ ]';
-    if (filename.endsWith('.css')) return '#';
-    if (filename.endsWith('.md')) return 'M';
-    if (filename.endsWith('.html')) return '<>';
-    return '•';
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.js') || lower.endsWith('.jsx')) return '{ }';
+    if (lower.endsWith('.json')) return '[ ]';
+    if (lower.endsWith('.css')) return '#';
+    if (lower.endsWith('.md')) return 'M';
+    if (lower.endsWith('.html')) return '<>';
+    if (lower.endsWith('.yml') || lower.endsWith('.yaml')) return '⚙';
+    if (lower.endsWith('.txt')) return '📄';
+    if (lower.endsWith('.env')) return '🔐';
+    if (lower.endsWith('.gitignore') || lower.endsWith('.dockerignore')) return '⊗';
+    if (lower === 'dockerfile' || lower.endsWith('dockerfile')) return '🐳';
+    if (lower === 'procfile') return '⚡';
+    if (lower.endsWith('.cjs') || lower.endsWith('.mjs')) return 'JS';
+    return '📁';
   };
 
   const getLineNumbers = (content) => {
@@ -155,9 +172,12 @@ function SourceCode() {
       <div className="animated-bg"></div>
       <div className="container" style={{ padding: '40px 20px', maxWidth: '1400px' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }} className="fade-in">
-          <h1 style={{ fontSize: '2.5rem', marginBottom: '1rem', fontWeight: '800' }}>
+          <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem', fontWeight: '800' }}>
             Source Code Viewer
           </h1>
+          <p style={{ fontSize: '0.9rem', opacity: 0.6, marginBottom: '1rem' }}>
+            All files from GitHub repository • Updates automatically
+          </p>
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', alignItems: 'center' }}>
             <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Home</Link>
             <button 
@@ -180,9 +200,46 @@ function SourceCode() {
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', height: 'calc(100vh - 200px)' }}>
           {/* File List Sidebar */}
           <div className="card slide-in" style={{ overflowY: 'auto', padding: '1rem' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '1rem', opacity: 0.8 }}>
-              Files
-            </h3>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '1rem'
+            }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '700', margin: 0, opacity: 0.8 }}>
+                  Files
+                </h3>
+                <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '4px' }}>
+                  {totalFiles} files total
+                </div>
+              </div>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#fff',
+                  padding: '6px 12px',
+                  borderRadius: '5px',
+                  cursor: refreshing ? 'not-allowed' : 'pointer',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  opacity: refreshing ? 0.5 : 1
+                }}
+              >
+                <span style={{ 
+                  display: 'inline-block',
+                  animation: refreshing ? 'spin 1s linear infinite' : 'none'
+                }}>
+                  ↻
+                </span>
+                Refresh
+              </button>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {files.map((file, index) => (
                 <button
