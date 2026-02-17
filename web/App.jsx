@@ -4,6 +4,8 @@ import BotStatus from './pages/BotStatus';
 import ServerStats from './pages/ServerStats';
 import InviteBot from './pages/InviteBot';
 import SourceCode from './pages/SourceCode';
+import Tickets from './pages/Tickets';
+import BotControls from './pages/BotControls';
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
         <Route path="/serverstats" element={<ServerStats />} />
         <Route path="/invite" element={<InviteBot />} />
         <Route path="/source" element={<SourceCode />} />
+        <Route path="/tickets" element={<Tickets />} />
+        <Route path="/botcontrols" element={<BotControls />} />
       </Routes>
     </Router>
   );

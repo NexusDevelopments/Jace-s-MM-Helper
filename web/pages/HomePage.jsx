@@ -17,7 +17,7 @@ function HomePage() {
             letterSpacing: '-2px',
             textTransform: 'uppercase'
           }}>
-            Jace's Promo/Demo Bot
+            Jace's MM Helper
           </h1>
           
           <div style={{ 
@@ -35,6 +35,12 @@ function HomePage() {
             </Link>
             <Link to="/invite" className="btn">
               Invite Bot
+            </Link>
+            <Link to="/tickets" className="btn">
+              Tickets
+            </Link>
+            <Link to="/botcontrols" className="btn">
+              Bot Controls
             </Link>
             <Link to="/source" className="btn">
               Source Code
