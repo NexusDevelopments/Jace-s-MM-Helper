@@ -653,22 +653,9 @@ client.login(BOT_TOKEN);
 // Express Web Server
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..')));
 
-// Main page route
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'index.html'));
-});
-
-// Bot status page route
-app.get('/botstatus', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'botstatus.html'));
-});
-
-// Server stats page route
-app.get('/serverstats', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'serverstats.html'));
-});
+// Serve static files from the React build
+app.use(express.static(path.join(__dirname, '..', 'dist')));
 
 // API: Health check
 app.get('/api/health', (req, res) => {
@@ -848,9 +835,15 @@ app.post('/api/bot/control', async (req, res) => {
   }
 });
 
+// Catch-all route to serve React app for client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
+});
+
 // Start Express server
 app.listen(PORT, () => {
   console.log(`Web server running on port ${PORT}`);
   console.log(`Main page: http://localhost:${PORT}/`);
   console.log(`Bot status: http://localhost:${PORT}/botstatus`);
+  console.log(`Server stats: http://localhost:${PORT}/serverstats`);
 });
