@@ -891,6 +891,100 @@ app.post('/api/bot/control', async (req, res) => {
   }
 });
 
+// API: Get list of source files
+app.get('/api/source/files', (req, res) => {
+  try {
+    const srcDir = path.join(__dirname);
+    const webDir = path.join(__dirname, '..', 'web');
+    const rootDir = path.join(__dirname, '..');
+
+    const files = [];
+
+    // Get all files recursively
+    function getFiles(dir, basePath = '') {
+      const items = fs.readdirSync(dir);
+      
+      items.forEach(item => {
+        const fullPath = path.join(dir, item);
+        const relativePath = path.join(basePath, item);
+        const stat = fs.statSync(fullPath);
+        
+        // Skip node_modules, dist, .git, and other build folders
+        if (item === 'node_modules' || item === 'dist' || item === '.git' || 
+            item === '.vscode' || item === 'build' || item.startsWith('.')) {
+          return;
+        }
+        
+        if (stat.isDirectory()) {
+          getFiles(fullPath, relativePath);
+        } else if (stat.isFile()) {
+          // Only include code-related files
+          const ext = path.extname(item);
+          if (['.js', '.jsx', '.json', '.css', '.html', '.md', '.txt', '.yml', '.yaml', '.cjs'].includes(ext)) {
+            files.push(relativePath);
+          }
+        }
+      });
+    }
+
+    // Get files from different directories
+    getFiles(srcDir, 'src');
+    if (fs.existsSync(webDir)) {
+      getFiles(webDir, 'web');
+    }
+    
+    // Add important root files
+    const rootFiles = ['package.json', 'README.md', 'Dockerfile', '.gitignore', 'ecosystem.config.cjs'];
+    rootFiles.forEach(file => {
+      const filePath = path.join(rootDir, file);
+      if (fs.existsSync(filePath)) {
+        files.push(file);
+      }
+    });
+
+    // Sort files alphabetically
+    files.sort();
+
+    res.json({ success: true, files });
+  } catch (error) {
+    console.error('Error listing files:', error);
+    res.status(500).json({ success: false, message: 'Failed to list files' });
+  }
+});
+
+// API: Get file content
+app.get('/api/source/file', (req, res) => {
+  try {
+    const { path: filePath } = req.query;
+    
+    if (!filePath) {
+      return res.status(400).json({ success: false, message: 'File path required' });
+    }
+
+    // Security: prevent directory traversal
+    const rootDir = path.join(__dirname, '..');
+    const fullPath = path.join(rootDir, filePath);
+    
+    // Ensure the resolved path is within the project directory
+    if (!fullPath.startsWith(rootDir)) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, message: 'File not found' });
+    }
+
+    // Read file content
+    const content = fs.readFileSync(fullPath, 'utf8');
+
+    res.json({ success: true, content });
+  } catch (error) {
+    console.error('Error reading file:', error);
+    res.status(500).json({ success: false, message: 'Failed to read file' });
+  }
+});
+
 // Catch-all route to serve React app for client-side routing
 app.get('*', (req, res) => {
   const indexPath = path.join(__dirname, '..', 'dist', 'index.html');

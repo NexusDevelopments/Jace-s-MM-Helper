@@ -36,6 +36,9 @@ function HomePage() {
             <Link to="/invite" className="btn">
               Invite Bot
             </Link>
+            <Link to="/source" className="btn">
+              Source Code
+            </Link>
           </div>
         </div>
       </div>
