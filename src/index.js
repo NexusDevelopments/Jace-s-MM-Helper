@@ -726,10 +726,19 @@ if (!BOT_TOKEN) {
   throw new Error('Missing BOT_TOKEN in env.');
 }
 
-// Initialize and start the bot
+// Initialize the client (but don't start it automatically)
+// Bot can be controlled via the web interface at /botstatus
 client = createClient();
 setupBotHandlers();
-client.login(BOT_TOKEN);
+
+// Auto-start bot if AUTO_START environment variable is set to 'true'
+if (process.env.AUTO_START === 'true') {
+  client.login(BOT_TOKEN).then(() => {
+    console.log('Bot auto-started on server launch');
+  }).catch((error) => {
+    console.error('Failed to auto-start bot:', error);
+  });
+}
 
 // Express Web Server
 const app = express();

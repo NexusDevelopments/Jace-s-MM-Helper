@@ -1,35 +1,62 @@
 # Demo / Promo Discord Bot
 
-Quick setup fr:
+A Discord bot with web dashboard for managing role promotions and demotions.
+
+## Quick Setup
 
 1. Create `.env`
-2. Fill your bot token + IDs
+2. Fill your bot token + IDs:
+   ```
+   BOT_TOKEN=your_bot_token_here
+   LOG_CHANNEL_ID=channel_id_for_logs
+   ALLOWED_ROLE_IDS=role1_id,role2_id
+   AUTO_START=false
+   PORT=3000
+   ```
 3. Install deps:
    - `npm install`
 4. Run bot:
    - `npm start`
+5. Access web dashboard at `http://localhost:3000`
 
-What it does:
-- `j$demo` starts the flow (prefix only)
-- asks for IDs with button + popup
-- auto pulls IDs from any messy text, sorts them, shows live progress
-- lets you submit IDs to run a demo wave (demote by 1 role each)
-- sends run log details to your log channel ID
-- auto-cleans stale saved ID sessions after 10 minutes
+## Features
 
-Config spots:
-- `ALLOWED_ROLE_IDS`: only these roles can use `j$demo`
-- `LOG_CHANNEL_ID`: where logs go
+**Discord Commands:**
+- `j$demo` - Demote users by removing their highest role and giving them the role one level down
+- `j$promo` - Promote users by removing their highest role and giving them the role one level up  
+- `j$help` - Shows all available commands
 
-Heads up:
-- Bot needs proper perms in server
-- Bot can only remove roles it can manage (role hierarchy still matters)
-- Turn on Server Members Intent in Discord Developer Portal
-- Turn on Message Content Intent in Discord Developer Portal for `j$demo`
+**Web Dashboard:**
+- **Bot Status** (`/botstatus`) - View bot status, uptime, and control the bot (start/stop/restart)
+- **Server Stats** (`/serverstats`) - View all servers the bot is in with member counts and permissions
+- **Invite Bot** (`/invite`) - Generate invite links with proper permissions
 
-Hosting note:
-- Prefix bots need a persistent process, so Vercel is not the right host for this mode.
-- Use Railway, Render, a VPS, or PM2 on your own machine for 24/7 hosting.
+## Bot Control
+
+By default, the bot does NOT auto-start when the server launches. You must start it via the web dashboard at `/botstatus`.
+
+To enable auto-start on server launch, set `AUTO_START=true` in your `.env` file.
+
+Once started (either via web or auto-start), the bot will stay online 24/7 until manually stopped.
+
+## Config
+
+- `BOT_TOKEN`: Your Discord bot token (required)
+- `ALLOWED_ROLE_IDS`: Comma-separated role IDs that can use demo/promo commands
+- `LOG_CHANNEL_ID`: Channel where logs are sent
+- `AUTO_START`: Set to `true` to auto-start bot on server launch (default: false)
+- `PORT`: Web server port (default: 3000)
+
+## Requirements
+
+- Bot needs proper permissions in server
+- Bot can only manage roles below its highest role (role hierarchy matters)
+- Enable **Server Members Intent** in Discord Developer Portal  
+- Enable **Message Content Intent** in Discord Developer Portal
+
+## Hosting
+
+This bot needs a persistent process for 24/7 operation. Use Railway, Render, VPS, or PM2.
 
 Deploy on Railway (easy):
 1. Push this repo to GitHub
