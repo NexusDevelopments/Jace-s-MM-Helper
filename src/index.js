@@ -1,4 +1,6 @@
 require('dotenv').config();
+const express = require('express');
+const path = require('path');
 const {
   ActionRowBuilder,
   AttachmentBuilder,
@@ -17,6 +19,7 @@ const PREFIX = 'j$';
 const OWNER_ID = '1435310225010987088';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+const PORT = process.env.PORT || 3000;
 const ALLOWED_ROLE_IDS = (process.env.ALLOWED_ROLE_IDS || '')
   .split(',')
   .map((roleId) => roleId.trim())
@@ -24,6 +27,7 @@ const ALLOWED_ROLE_IDS = (process.env.ALLOWED_ROLE_IDS || '')
 const SESSION_TTL_MS = 10 * 60 * 1000;
 
 const sessions = new Map();
+let botStartTime = null;
 
 const client = new Client({
   intents: [
@@ -90,6 +94,32 @@ function getDemotionRoles(member) {
   return { roleToRemove: topRemovableRole, roleToAdd: roleBelow, reason: null };
 }
 
+function getPromotionRoles(member) {
+  const topRemovableRole = member.roles.cache
+    .filter((role) => role.id !== member.guild.id && !role.managed && role.editable)
+    .sort((left, right) => right.position - left.position)
+    .first() || null;
+
+  if (!topRemovableRole) {
+    return { roleToRemove: null, roleToAdd: null, reason: 'no removable role found' };
+  }
+
+  const roleAbove = member.guild.roles.cache
+    .filter((role) => role.id !== member.guild.id && !role.managed && role.editable)
+    .sort((left, right) => left.position - right.position)
+    .find((role) => role.position > topRemovableRole.position) || null;
+
+  if (!roleAbove) {
+    return {
+      roleToRemove: topRemovableRole,
+      roleToAdd: null,
+      reason: 'no higher assignable role found'
+    };
+  }
+
+  return { roleToRemove: topRemovableRole, roleToAdd: roleAbove, reason: null };
+}
+
 function buildFormatProgressEmbed(done, total) {
   return new EmbedBuilder()
     .setColor(LIGHT_BLUE)
@@ -101,6 +131,13 @@ function buildDemoteProgressEmbed(done, total) {
   return new EmbedBuilder()
     .setColor(LIGHT_BLUE)
     .setTitle('Running demo wave...')
+    .setDescription(`Progress: ${done}/${total}\n${makeBar(done, total)}`);
+}
+
+function buildPromoteProgressEmbed(done, total) {
+  return new EmbedBuilder()
+    .setColor(LIGHT_BLUE)
+    .setTitle('Running promo wave...')
     .setDescription(`Progress: ${done}/${total}\n${makeBar(done, total)}`);
 }
 
@@ -127,7 +164,24 @@ function getDemoStartPayload() {
   return { embeds: [embed], components: [row] };
 }
 
+function getPromoStartPayload() {
+  const embed = new EmbedBuilder()
+    .setColor(LIGHT_BLUE)
+    .setTitle('Promo Wave Setup')
+    .setDescription('Send the list of user ids.');
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('promo_paste_ids')
+      .setLabel('Paste list of IDs')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
 client.once('ready', () => {
+  botStartTime = Date.now();
   console.log(`Bot online as ${client.user.tag}`);
 
   setInterval(() => {
@@ -144,20 +198,63 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.inGuild()) return;
 
   const content = message.content.trim().toLowerCase();
-  if (!content.startsWith(`${PREFIX}demo`)) return;
-
-  if (!hasAllowedRole(message.member, message.author.id)) {
-    await message.reply('You do not have access to this command.');
+  
+  if (content.startsWith(`${PREFIX}demo`)) {
+    if (!hasAllowedRole(message.member, message.author.id)) {
+      await message.reply('You do not have access to this command.');
+      return;
+    }
+    await message.reply(getDemoStartPayload());
     return;
   }
-
-  await message.reply(getDemoStartPayload());
+  
+  if (content.startsWith(`${PREFIX}promo`)) {
+    if (!hasAllowedRole(message.member, message.author.id)) {
+      await message.reply('You do not have access to this command.');
+      return;
+    }
+    await message.reply(getPromoStartPayload());
+    return;
+  }
+  
+  if (content.startsWith(`${PREFIX}help`)) {
+    const helpEmbed = new EmbedBuilder()
+      .setColor(LIGHT_BLUE)
+      .setTitle('Available Commands')
+      .setDescription('Here are the commands you can use:')
+      .addFields(
+        { name: 'j$demo', value: 'Demote users by removing their highest role and giving them the role one level down.' },
+        { name: 'j$promo', value: 'Promote users by removing their highest role and giving them the role one level up.' },
+        { name: 'j$help', value: 'Shows this help message with all available commands.' }
+      )
+      .setTimestamp();
+    
+    await message.reply({ embeds: [helpEmbed] });
+    return;
+  }
 });
 
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isButton() && interaction.customId === 'demo_paste_ids') {
       const modal = new ModalBuilder().setCustomId('demo_ids_modal').setTitle('Paste IDs');
+
+      const idsInput = new TextInputBuilder()
+        .setCustomId('ids_input')
+        .setLabel('User IDs')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Paste ids in any format')
+        .setRequired(true);
+
+      const modalRow = new ActionRowBuilder().addComponents(idsInput);
+      modal.addComponents(modalRow);
+
+      await interaction.showModal(modal);
+      return;
+    }
+    
+    if (interaction.isButton() && interaction.customId === 'promo_paste_ids') {
+      const modal = new ModalBuilder().setCustomId('promo_ids_modal').setTitle('Paste IDs');
 
       const idsInput = new TextInputBuilder()
         .setCustomId('ids_input')
@@ -188,7 +285,8 @@ client.on('interactionCreate', async (interaction) => {
       sessions.set(interaction.user.id, {
         ids,
         createdAt: Date.now(),
-        guildId: interaction.guildId
+        guildId: interaction.guildId,
+        type: 'demo'
       });
 
       await interaction.reply({ content: 'Ids have been submitted!', ephemeral: true });
@@ -214,6 +312,59 @@ client.on('interactionCreate', async (interaction) => {
       const submitRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('demo_submit_ids')
+          .setLabel('Submit IDs')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await interaction.webhook.editMessage(progressMessage.id, {
+        embeds: [doneEmbed],
+        components: [submitRow]
+      });
+      return;
+    }
+    
+    if (interaction.isModalSubmit() && interaction.customId === 'promo_ids_modal') {
+      const raw = interaction.fields.getTextInputValue('ids_input');
+      const ids = parseUserIds(raw);
+
+      if (!ids.length) {
+        await interaction.reply({
+          content: 'No valid user IDs were found. Try again.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      sessions.set(interaction.user.id, {
+        ids,
+        createdAt: Date.now(),
+        guildId: interaction.guildId,
+        type: 'promo'
+      });
+
+      await interaction.reply({ content: 'Ids have been submitted!', ephemeral: true });
+
+      const progressMessage = await interaction.followUp({
+        embeds: [buildFormatProgressEmbed(0, ids.length)],
+        ephemeral: true,
+        fetchReply: true
+      });
+
+      for (let index = 0; index < ids.length; index += 1) {
+        await sleep(280);
+        await interaction.webhook.editMessage(progressMessage.id, {
+          embeds: [buildFormatProgressEmbed(index + 1, ids.length)]
+        });
+      }
+
+      const doneEmbed = new EmbedBuilder()
+        .setColor(LIGHT_BLUE)
+        .setTitle('Wave IDs formatted successfully')
+        .setDescription(`Total IDs ready: ${ids.length}`);
+
+      const submitRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('promo_submit_ids')
           .setLabel('Submit IDs')
           .setStyle(ButtonStyle.Primary)
       );
@@ -349,6 +500,131 @@ client.on('interactionCreate', async (interaction) => {
 
       sessions.delete(interaction.user.id);
     }
+    
+    if (interaction.isButton() && interaction.customId === 'promo_submit_ids') {
+      const session = sessions.get(interaction.user.id);
+
+      if (!session) {
+        await interaction.reply({
+          content: `No IDs saved for you yet. Run ${PREFIX}promo first.`,
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (session.guildId !== interaction.guildId) {
+        await interaction.reply({
+          content: 'Saved IDs belong to a different server session.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (Date.now() - session.createdAt > SESSION_TTL_MS) {
+        sessions.delete(interaction.user.id);
+        await interaction.reply({
+          content: 'Your saved ids expired. Run j$promo again for a new wave.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      const total = session.ids.length;
+      const succeeded = [];
+      const failed = [];
+      const notFound = [];
+
+      await interaction.reply({
+        embeds: [buildPromoteProgressEmbed(0, total)],
+        ephemeral: true
+      });
+
+      for (let index = 0; index < total; index += 1) {
+        const userId = session.ids[index];
+        try {
+          const member = await interaction.guild.members.fetch(userId);
+          const { roleToRemove, roleToAdd, reason } = getPromotionRoles(member);
+
+          if (roleToRemove && roleToAdd) {
+            await member.roles.remove(roleToRemove.id, `Promo wave by ${interaction.user.tag}`);
+            if (!member.roles.cache.has(roleToAdd.id)) {
+              await member.roles.add(roleToAdd.id, `Promo wave by ${interaction.user.tag}`);
+            }
+            succeeded.push(userId);
+          } else {
+            failed.push(`${userId} (${reason || 'promotion step failed'})`);
+          }
+        } catch (error) {
+          if (error.code === 10007) {
+            notFound.push(userId);
+          } else {
+            failed.push(`${userId} (${error.message || 'unknown error'})`);
+          }
+        }
+
+        await sleep(300);
+        await interaction.editReply({
+          embeds: [buildPromoteProgressEmbed(index + 1, total)]
+        });
+      }
+
+      const completeEmbed = new EmbedBuilder()
+        .setColor(LIGHT_BLUE)
+        .setTitle('Wave promotes complete')
+        .setDescription(
+          `Total: ${total}\nSuccess: ${succeeded.length}\nNot found: ${notFound.length}\nFailed: ${failed.length}`
+        );
+
+      await interaction.editReply({ embeds: [completeEmbed] });
+
+      if (LOG_CHANNEL_ID) {
+        const logChannel = await interaction.guild.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+        if (logChannel && logChannel.isTextBased()) {
+          const logEmbed = new EmbedBuilder()
+            .setColor(LIGHT_BLUE)
+            .setTitle('Promo Wave Log')
+            .addFields(
+              { name: 'Run by', value: `${interaction.user.tag} (${interaction.user.id})` },
+              { name: 'Guild', value: `${interaction.guild.name} (${interaction.guild.id})` },
+              { name: 'Total IDs', value: String(total), inline: true },
+              { name: 'Success', value: String(succeeded.length), inline: true },
+              { name: 'Not found', value: String(notFound.length), inline: true },
+              { name: 'Failed', value: String(failed.length), inline: true },
+              { name: 'Summary', value: `${shortList('Success IDs', succeeded)}\n${shortList('Not found IDs', notFound)}` }
+            )
+            .setTimestamp();
+
+          const logLines = [
+            `Run by: ${interaction.user.tag} (${interaction.user.id})`,
+            `Guild: ${interaction.guild.name} (${interaction.guild.id})`,
+            `Total IDs: ${total}`,
+            `Success: ${succeeded.length}`,
+            `Not found: ${notFound.length}`,
+            `Failed: ${failed.length}`,
+            '',
+            'Sorted IDs:',
+            ...session.ids,
+            '',
+            'Success IDs:',
+            ...(succeeded.length ? succeeded : ['none']),
+            '',
+            'Not found IDs:',
+            ...(notFound.length ? notFound : ['none']),
+            '',
+            'Failed IDs:',
+            ...(failed.length ? failed : ['none'])
+          ];
+
+          const attachment = new AttachmentBuilder(Buffer.from(logLines.join('\n'), 'utf8'), {
+            name: `promo-wave-log-${Date.now()}.txt`
+          });
+
+          await logChannel.send({ embeds: [logEmbed], files: [attachment] });
+        }
+      }
+
+      sessions.delete(interaction.user.id);
+    }
   } catch (error) {
     console.error('Interaction error:', error);
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
@@ -373,3 +649,208 @@ if (!BOT_TOKEN) {
 }
 
 client.login(BOT_TOKEN);
+
+// Express Web Server
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '..')));
+
+// Main page route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'index.html'));
+});
+
+// Bot status page route
+app.get('/botstatus', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'botstatus.html'));
+});
+
+// Server stats page route
+app.get('/serverstats', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'serverstats.html'));
+});
+
+// API: Health check
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, service: 'jaces-promo-demo-bot' });
+});
+
+// API: Bot status
+app.get('/api/bot/status', (req, res) => {
+  if (!client.isReady()) {
+    return res.json({
+      online: false,
+      uptime: 0,
+      username: null,
+      guilds: 0,
+      ping: null
+    });
+  }
+
+  const uptime = botStartTime ? Math.floor((Date.now() - botStartTime) / 1000) : 0;
+
+  res.json({
+    online: true,
+    uptime: uptime,
+    username: client.user.tag,
+    guilds: client.guilds.cache.size,
+    ping: client.ws.ping
+  });
+});
+
+// API: Server statistics
+app.get('/api/servers', async (req, res) => {
+  if (!client.isReady()) {
+    return res.json({
+      success: false,
+      message: 'Bot is not online'
+    });
+  }
+
+  try {
+    const servers = [];
+
+    for (const [guildId, guild] of client.guilds.cache) {
+      try {
+        // Fetch owner information
+        let ownerTag = 'Unknown';
+        try {
+          const owner = await guild.fetchOwner();
+          ownerTag = owner.user.tag;
+        } catch (e) {
+          // Owner fetch failed, use Unknown
+        }
+
+        // Get bot member to check permissions
+        const botMember = guild.members.me;
+        const permissions = [];
+
+        if (botMember) {
+          const perms = botMember.permissions;
+          
+          // Check for key permissions
+          if (perms.has('Administrator')) {
+            permissions.push('Administrator');
+          } else {
+            if (perms.has('ManageGuild')) permissions.push('Manage Server');
+            if (perms.has('ManageRoles')) permissions.push('Manage Roles');
+            if (perms.has('ManageChannels')) permissions.push('Manage Channels');
+            if (perms.has('KickMembers')) permissions.push('Kick Members');
+            if (perms.has('BanMembers')) permissions.push('Ban Members');
+            if (perms.has('ManageMessages')) permissions.push('Manage Messages');
+            if (perms.has('ViewAuditLog')) permissions.push('View Audit Log');
+            if (perms.has('SendMessages')) permissions.push('Send Messages');
+            if (perms.has('EmbedLinks')) permissions.push('Embed Links');
+            if (perms.has('AttachFiles')) permissions.push('Attach Files');
+            if (perms.has('ReadMessageHistory')) permissions.push('Read Message History');
+            if (perms.has('ManageNicknames')) permissions.push('Manage Nicknames');
+          }
+        }
+
+        servers.push({
+          id: guild.id,
+          name: guild.name,
+          ownerTag: ownerTag,
+          memberCount: guild.memberCount,
+          roleCount: guild.roles.cache.size,
+          channelCount: guild.channels.cache.size,
+          joinedAt: guild.joinedAt ? guild.joinedAt.getTime() : null,
+          createdAt: guild.createdAt ? guild.createdAt.getTime() : null,
+          permissions: permissions.length > 0 ? permissions : ['None']
+        });
+      } catch (error) {
+        console.error(`Error fetching data for guild ${guildId}:`, error);
+      }
+    }
+
+    // Sort by member count (largest first)
+    servers.sort((a, b) => b.memberCount - a.memberCount);
+
+    res.json({
+      success: true,
+      servers: servers
+    });
+  } catch (error) {
+    console.error('Error fetching server stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch server statistics'
+    });
+  }
+});
+
+// API: Bot control (start, stop, restart)
+app.post('/api/bot/control', async (req, res) => {
+  const { action } = req.body;
+
+  if (!['start', 'stop', 'restart'].includes(action)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid action. Use: start, stop, or restart'
+    });
+  }
+
+  try {
+    if (action === 'stop') {
+      res.json({
+        success: true,
+        message: 'Bot is shutting down...'
+      });
+      
+      await client.destroy();
+      botStartTime = null;
+      
+      // Note: In production, you'd use PM2 or a process manager
+      // This is a graceful shutdown but won't restart automatically
+      setTimeout(() => {
+        console.log('Bot stopped via web interface');
+      }, 1000);
+      
+    } else if (action === 'start') {
+      if (client.isReady()) {
+        return res.json({
+          success: false,
+          message: 'Bot is already online'
+        });
+      }
+      
+      await client.login(BOT_TOKEN);
+      
+      res.json({
+        success: true,
+        message: 'Bot is starting...'
+      });
+      
+    } else if (action === 'restart') {
+      res.json({
+        success: true,
+        message: 'Bot is restarting...'
+      });
+      
+      await client.destroy();
+      botStartTime = null;
+      
+      setTimeout(async () => {
+        try {
+          await client.login(BOT_TOKEN);
+          console.log('Bot restarted via web interface');
+        } catch (error) {
+          console.error('Failed to restart bot:', error);
+        }
+      }, 2000);
+    }
+  } catch (error) {
+    console.error('Control error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to execute action'
+    });
+  }
+});
+
+// Start Express server
+app.listen(PORT, () => {
+  console.log(`Web server running on port ${PORT}`);
+  console.log(`Main page: http://localhost:${PORT}/`);
+  console.log(`Bot status: http://localhost:${PORT}/botstatus`);
+});
