@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const {
   ActionRowBuilder,
   AttachmentBuilder,
@@ -837,7 +838,63 @@ app.post('/api/bot/control', async (req, res) => {
 
 // Catch-all route to serve React app for client-side routing
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  
+  // Check if the built React app exists
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    // Fallback if build doesn't exist
+    res.status(503).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Build Required</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+              background: #000;
+              color: #fff;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100vh;
+              text-align: center;
+            }
+            .container {
+              max-width: 600px;
+              padding: 40px;
+            }
+            h1 {
+              font-size: 2.5rem;
+              margin-bottom: 1rem;
+            }
+            p {
+              font-size: 1.1rem;
+              line-height: 1.6;
+              opacity: 0.8;
+            }
+            code {
+              background: rgba(255, 255, 255, 0.1);
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-family: monospace;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Build Required</h1>
+            <p>The React application needs to be built first.</p>
+            <p>Please run: <code>npm run build</code></p>
+            <p>Or the server will automatically build on start with: <code>npm start</code></p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
 });
 
 // Start Express server
