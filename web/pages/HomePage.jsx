@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import logo from '../assets/securify-logo.svg';
 
 function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -45,6 +46,7 @@ function HomePage() {
         textAlign: 'center'
       }}>
         <div className="fade-in">
+          <img src={logo} alt="Securify logo" className="home-logo" />
           <h1 style={{
             fontSize: 'clamp(2.5rem, 8vw, 5rem)',
             marginBottom: '0.5rem',
@@ -57,7 +59,7 @@ function HomePage() {
             backgroundClip: 'text',
             textShadow: '0 0 80px rgba(255, 255, 255, 0.3)'
           }}>
-            Jace's MM Helper
+            Securify
           </h1>
 
           <p style={{
