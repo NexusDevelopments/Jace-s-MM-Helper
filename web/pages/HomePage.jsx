@@ -78,7 +78,6 @@ function HomePage() {
             padding: '0 20px'
           }}>
             <Link to="/botstatus" className="home-btn btn-glass">
-              <span className="btn-icon">🤖</span>
               <span className="btn-text">
                 <span className="btn-title">Bot Status</span>
                 <span className="btn-subtitle">Monitor bot activity</span>
@@ -87,7 +86,6 @@ function HomePage() {
             </Link>
             
             <Link to="/serverstats" className="home-btn btn-glass">
-              <span className="btn-icon">📊</span>
               <span className="btn-text">
                 <span className="btn-title">Server Stats</span>
                 <span className="btn-subtitle">View server info</span>
@@ -96,7 +94,6 @@ function HomePage() {
             </Link>
             
             <Link to="/invite" className="home-btn btn-glass">
-              <span className="btn-icon">✨</span>
               <span className="btn-text">
                 <span className="btn-title">Invite Bot</span>
                 <span className="btn-subtitle">Add to your server</span>
@@ -105,7 +102,6 @@ function HomePage() {
             </Link>
             
             <Link to="/tickets" className="home-btn btn-glass">
-              <span className="btn-icon">🎫</span>
               <span className="btn-text">
                 <span className="btn-title">Tickets</span>
                 <span className="btn-subtitle">Support system</span>
@@ -114,7 +110,6 @@ function HomePage() {
             </Link>
             
             <Link to="/botcontrols" className="home-btn btn-glass">
-              <span className="btn-icon">🎮</span>
               <span className="btn-text">
                 <span className="btn-title">Bot Controls</span>
                 <span className="btn-subtitle">Advanced features</span>
@@ -123,7 +118,6 @@ function HomePage() {
             </Link>
             
             <Link to="/source" className="home-btn btn-glass">
-              <span className="btn-icon">💻</span>
               <span className="btn-text">
                 <span className="btn-title">Source Code</span>
                 <span className="btn-subtitle">View repository</span>
