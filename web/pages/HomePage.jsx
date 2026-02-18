@@ -90,14 +90,54 @@ function HomePage() {
         <main className="home-main fade-in">
           <h1 className="home-main-title">Securify</h1>
           <p className="home-main-subtitle">
-            Grey theme dashboard for managing and expanding into a global Discord bot platform.
+            Global moderation and security platform for Discord communities.
           </p>
 
-          <div className="card" style={{ maxWidth: '760px' }}>
-            <h2 style={{ marginBottom: '0.75rem' }}>Global Bot Direction</h2>
-            <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
-              Use the Global Setup tab to configure OAuth credentials (client id, secret, bot token), authorize with Discord, and enable command modules.
-            </p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <Link to="/global" className="btn btn-primary">Sign in with Discord</Link>
+            <Link to="/botcontrols" className="btn">Open Command Console</Link>
+          </div>
+
+          <div className="home-metrics">
+            <div className="home-metric-card">
+              <div className="home-metric-value">24/7</div>
+              <div className="home-metric-label">Threat monitoring</div>
+            </div>
+            <div className="home-metric-card">
+              <div className="home-metric-value">7</div>
+              <div className="home-metric-label">Command modules</div>
+            </div>
+            <div className="home-metric-card">
+              <div className="home-metric-value">1-click</div>
+              <div className="home-metric-label">Discord onboarding</div>
+            </div>
+          </div>
+
+          <div className="home-feature-grid">
+            <div className="card">
+              <h2 style={{ marginBottom: '0.5rem' }}>Auto moderation</h2>
+              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
+                Filter spam, mass mentions, dangerous links, and suspicious behavior in real-time.
+              </p>
+            </div>
+            <div className="card">
+              <h2 style={{ marginBottom: '0.5rem' }}>Anti-raid protection</h2>
+              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
+                Lock down channels, rate-limit joins, and enforce verification during attacks.
+              </p>
+            </div>
+            <div className="card">
+              <h2 style={{ marginBottom: '0.5rem' }}>Audit logging</h2>
+              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
+                Keep complete moderation logs and role-history trails for accountability.
+              </p>
+            </div>
+            <div className="card">
+              <h2 style={{ marginBottom: '0.5rem' }}>Global command center</h2>
+              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
+                Configure OAuth, credentials, and module toggles from one centralized dashboard.
+              </p>
+            </div>
           </div>
         </main>
       </div>

@@ -5,7 +5,7 @@ function GlobalSetup() {
   const [loading, setLoading] = useState(true);
   const [setup, setSetup] = useState(null);
   const [oauthUrl, setOauthUrl] = useState('');
-  const [commands, setCommands] = useState([]);
+  const [modules, setModules] = useState([]);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [form, setForm] = useState({
     companyName: 'Securify',
@@ -17,6 +17,17 @@ function GlobalSetup() {
   });
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthState = params.get('oauth');
+
+    if (oauthState === 'success') {
+      setMessage({ type: 'success', text: 'Discord account authorized successfully.' });
+    } else if (oauthState === 'failed') {
+      setMessage({ type: 'error', text: 'Discord authorization failed. Check your app credentials and redirect URI.' });
+    } else if (oauthState === 'missing_credentials') {
+      setMessage({ type: 'error', text: 'Set client id and secret before authorization.' });
+    }
+
     loadSetup();
   }, []);
 
@@ -27,7 +38,7 @@ function GlobalSetup() {
       if (data.success) {
         setSetup(data.setup);
         setOauthUrl(data.oauthUrl || '');
-        setCommands(data.commandCatalog || []);
+        setModules(data.modules || []);
         setForm((prev) => ({
           ...prev,
           companyName: data.setup.companyName || 'Securify',
@@ -41,6 +52,34 @@ function GlobalSetup() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveModules = async () => {
+    try {
+      const response = await fetch('/api/global/modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modules })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to save modules');
+      }
+
+      setMessage({ type: 'success', text: 'Command modules updated.' });
+      setModules(data.modules || modules);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const toggleModule = (moduleId) => {
+    setModules((prev) =>
+      prev.map((module) =>
+        module.id === moduleId ? { ...module, enabled: !module.enabled } : module
+      )
+    );
   };
 
   const handleSubmit = async (event) => {
@@ -85,10 +124,10 @@ function GlobalSetup() {
       <div className="container" style={{ padding: '40px 20px', maxWidth: '1100px' }}>
         <div className="fade-in" style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1 style={{ fontSize: '2.3rem', fontWeight: '800', marginBottom: '0.5rem' }}>
-            Securify Global Bot Setup
+            Securify Control Center
           </h1>
           <p style={{ opacity: 0.7, marginBottom: '1rem' }}>
-            Dyno/Carl style onboarding flow (MVP)
+            Dyno/Carl style setup for a global security bot
           </p>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
             <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Home</Link>
@@ -110,9 +149,31 @@ function GlobalSetup() {
           </div>
         )}
 
+        <div className="grid" style={{ gap: '1rem', marginBottom: '1rem' }}>
+          <div className="card">
+            <h2 style={{ marginBottom: '0.8rem', fontSize: '1.2rem' }}>Step 1: Authorize Discord Account</h2>
+            <div className={`badge ${setup?.auth?.connected ? 'online' : 'offline'}`}>
+              <span className={`status-dot ${setup?.auth?.connected ? 'online' : 'offline'}`}></span>
+              <span>{setup?.auth?.connected ? 'Connected' : 'Not Connected'}</span>
+            </div>
+            {setup?.auth?.user && (
+              <p style={{ marginTop: '0.75rem', opacity: 0.75 }}>
+                Signed in as {setup.auth.user.username}
+              </p>
+            )}
+            {oauthUrl ? (
+              <a className="btn btn-primary" href={oauthUrl} style={{ marginTop: '1rem', display: 'inline-block' }}>
+                Sign in with Discord
+              </a>
+            ) : (
+              <p style={{ marginTop: '0.75rem', opacity: 0.7 }}>Save credentials first to generate authorization URL.</p>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-2" style={{ alignItems: 'start' }}>
           <form className="card" onSubmit={handleSubmit}>
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Credentials</h2>
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Step 2: App Credentials</h2>
             <input
               type="text"
               placeholder="Corporation Name"
@@ -162,36 +223,38 @@ function GlobalSetup() {
           </form>
 
           <div className="card">
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Authorize + Commands</h2>
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Step 3: Command Modules</h2>
             <p style={{ opacity: 0.75, marginBottom: '1rem' }}>
-              After saving credentials, authorize your Discord account and unlock the global command modules.
+              Enable the modules your global security bot should run.
             </p>
-            {oauthUrl ? (
-              <a className="btn btn-primary" href={oauthUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginBottom: '1rem' }}>
-                Authorize Discord Account
-              </a>
-            ) : (
-              <p style={{ opacity: 0.65, marginBottom: '1rem' }}>Save setup details to generate OAuth authorization URL.</p>
-            )}
 
             <div style={{ marginTop: '0.75rem' }}>
               <div style={{ fontSize: '0.85rem', opacity: 0.65, marginBottom: '0.5rem' }}>AVAILABLE COMMAND GROUPS</div>
               <div style={{ display: 'grid', gap: '0.5rem' }}>
-                {commands.map((command) => (
-                  <div
-                    key={command}
+                {modules.map((module) => (
+                  <button
+                    key={module.id}
+                    type="button"
+                    onClick={() => toggleModule(module.id)}
                     style={{
                       padding: '10px',
                       borderRadius: '8px',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      background: 'rgba(255,255,255,0.04)'
+                      border: module.enabled ? '1px solid rgba(255,255,255,0.45)' : '1px solid rgba(255,255,255,0.15)',
+                      background: module.enabled ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
+                      color: '#fff',
+                      textAlign: 'left',
+                      cursor: 'pointer'
                     }}
                   >
-                    {command}
-                  </div>
+                    {module.name} {module.enabled ? '• Enabled' : '• Disabled'}
+                  </button>
                 ))}
               </div>
             </div>
+
+            <button className="btn" type="button" onClick={saveModules} style={{ marginTop: '1rem' }}>
+              Save Modules
+            </button>
 
             {setup?.configured && (
               <p style={{ marginTop: '1rem', opacity: 0.7 }}>

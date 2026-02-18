@@ -40,6 +40,21 @@ let globalBotSetup = {
   botToken: '',
   redirectUri: '',
   scopes: 'identify guilds',
+  modules: [
+    { id: 'moderation', name: 'Moderation', enabled: true },
+    { id: 'automod', name: 'Auto moderation', enabled: true },
+    { id: 'roles', name: 'Role management', enabled: true },
+    { id: 'welcome', name: 'Welcome & goodbye', enabled: true },
+    { id: 'logging', name: 'Logging', enabled: true },
+    { id: 'utility', name: 'Utility', enabled: true },
+    { id: 'security', name: 'Security anti-raid', enabled: true }
+  ],
+  auth: {
+    connected: false,
+    user: null,
+    connectedAt: null,
+    lastError: null
+  },
   configured: false,
   updatedAt: null
 };
@@ -1040,35 +1055,37 @@ app.post('/api/bot/controls/send-image', async (req, res) => {
   }
 });
 
-// API: Global bot onboarding setup (MVP)
-app.get('/api/global/setup', (req, res) => {
-  const hasClientId = Boolean(globalBotSetup.clientId);
-  const redirectUri = globalBotSetup.redirectUri || `http://localhost:${PORT}/global`;
-  const oauthUrl = hasClientId
-    ? `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(globalBotSetup.clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(globalBotSetup.scopes)}`
-    : null;
+function getBaseUrl(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
 
+function getEffectiveRedirectUri(req) {
+  return globalBotSetup.redirectUri || `${getBaseUrl(req)}/api/global/oauth/callback`;
+}
+
+function buildOAuthUrl(req) {
+  if (!globalBotSetup.clientId) return null;
+  return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(globalBotSetup.clientId)}&response_type=code&redirect_uri=${encodeURIComponent(getEffectiveRedirectUri(req))}&scope=${encodeURIComponent(globalBotSetup.scopes)}`;
+}
+
+// API: Global bot onboarding setup
+app.get('/api/global/setup', (req, res) => {
   res.json({
     success: true,
     setup: {
       companyName: globalBotSetup.companyName,
       clientId: globalBotSetup.clientId,
-      redirectUri,
+      redirectUri: getEffectiveRedirectUri(req),
       scopes: globalBotSetup.scopes,
       configured: globalBotSetup.configured,
       hasClientSecret: Boolean(globalBotSetup.clientSecret),
       hasBotToken: Boolean(globalBotSetup.botToken),
-      updatedAt: globalBotSetup.updatedAt
+      updatedAt: globalBotSetup.updatedAt,
+      auth: globalBotSetup.auth
     },
-    oauthUrl,
-    commandCatalog: [
-      'Moderation',
-      'Auto moderation',
-      'Role management',
-      'Welcome & goodbye',
-      'Logging',
-      'Utility'
-    ]
+    oauthUrl: buildOAuthUrl(req),
+    modules: globalBotSetup.modules,
+    commandCatalog: globalBotSetup.modules.map((module) => module.name)
   });
 });
 
@@ -1090,23 +1107,125 @@ app.post('/api/global/setup', (req, res) => {
   }
 
   globalBotSetup = {
+    ...globalBotSetup,
     companyName: String(companyName || 'Securify').trim() || 'Securify',
     clientId: String(clientId).trim(),
     clientSecret: String(clientSecret).trim(),
     botToken: String(botToken).trim(),
-    redirectUri: String(redirectUri || `http://localhost:${PORT}/global`).trim(),
+    redirectUri: String(redirectUri || '').trim(),
     scopes: String(scopes || 'identify guilds').trim() || 'identify guilds',
     configured: true,
     updatedAt: Date.now()
   };
 
-  const oauthUrl = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(globalBotSetup.clientId)}&response_type=code&redirect_uri=${encodeURIComponent(globalBotSetup.redirectUri)}&scope=${encodeURIComponent(globalBotSetup.scopes)}`;
-
   res.json({
     success: true,
     message: 'Global bot setup saved',
-    oauthUrl
+    oauthUrl: buildOAuthUrl(req)
   });
+});
+
+app.post('/api/global/modules', (req, res) => {
+  const { modules } = req.body || {};
+
+  if (!Array.isArray(modules)) {
+    return res.status(400).json({
+      success: false,
+      message: 'modules array is required'
+    });
+  }
+
+  const existingById = new Map(globalBotSetup.modules.map((module) => [module.id, module]));
+  const normalized = modules
+    .filter((module) => module && typeof module.id === 'string' && existingById.has(module.id))
+    .map((module) => ({
+      ...existingById.get(module.id),
+      enabled: Boolean(module.enabled)
+    }));
+
+  if (!normalized.length) {
+    return res.status(400).json({
+      success: false,
+      message: 'No valid modules provided'
+    });
+  }
+
+  globalBotSetup.modules = normalized;
+  globalBotSetup.updatedAt = Date.now();
+
+  res.json({
+    success: true,
+    message: 'Module settings updated',
+    modules: globalBotSetup.modules
+  });
+});
+
+app.get('/api/global/oauth/callback', async (req, res) => {
+  const code = String(req.query.code || '');
+
+  if (!code) {
+    return res.redirect('/global?oauth=missing_code');
+  }
+
+  if (!globalBotSetup.clientId || !globalBotSetup.clientSecret) {
+    return res.redirect('/global?oauth=missing_credentials');
+  }
+
+  try {
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: globalBotSetup.clientId,
+        client_secret: globalBotSetup.clientSecret,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: getEffectiveRedirectUri(req)
+      }).toString()
+    });
+
+    if (!tokenResponse.ok) {
+      const failedText = await tokenResponse.text();
+      throw new Error(`Discord token exchange failed: ${failedText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`
+      }
+    });
+
+    if (!userResponse.ok) {
+      const failedUser = await userResponse.text();
+      throw new Error(`Discord user fetch failed: ${failedUser}`);
+    }
+
+    const userData = await userResponse.json();
+    globalBotSetup.auth = {
+      connected: true,
+      user: {
+        id: userData.id,
+        username: userData.username,
+        discriminator: userData.discriminator,
+        avatar: userData.avatar
+      },
+      connectedAt: Date.now(),
+      lastError: null
+    };
+    globalBotSetup.updatedAt = Date.now();
+
+    return res.redirect('/global?oauth=success');
+  } catch (error) {
+    console.error('Discord OAuth callback error:', error);
+    globalBotSetup.auth = {
+      connected: false,
+      user: null,
+      connectedAt: null,
+      lastError: error.message || 'OAuth failed'
+    };
+    return res.redirect('/global?oauth=failed');
+  }
 });
 
 // API: Get list of source files

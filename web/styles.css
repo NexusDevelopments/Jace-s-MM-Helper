@@ -99,6 +99,40 @@ body {
   margin-bottom: 1.3rem;
 }
 
+.home-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 1rem;
+  width: min(760px, 100%);
+}
+
+.home-metric-card {
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.home-metric-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #f3f3f3;
+}
+
+.home-metric-label {
+  margin-top: 2px;
+  opacity: 0.75;
+  font-size: 0.85rem;
+}
+
+.home-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: min(900px, 100%);
+}
+
 .rebrand-overlay {
   position: fixed;
   inset: 0;
@@ -575,6 +609,14 @@ body {
 
   .home-main {
     min-height: auto;
+  }
+
+  .home-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .home-feature-grid {
+    grid-template-columns: 1fr;
   }
 
   .home-btn {
