@@ -913,6 +913,123 @@ app.post('/api/bot/control', async (req, res) => {
   }
 });
 
+// API: Advanced bot controls
+app.get('/api/bot/controls/invite', (req, res) => {
+  if (!client || !client.isReady()) {
+    return res.status(503).json({
+      success: false,
+      message: 'Bot must be online to generate invite links'
+    });
+  }
+
+  const botId = client.user.id;
+
+  res.json({
+    success: true,
+    botId,
+    inviteUrl: `https://discord.com/api/oauth2/authorize?client_id=${botId}&permissions=268445760&scope=bot`,
+    adminInviteUrl: `https://discord.com/api/oauth2/authorize?client_id=${botId}&permissions=8&scope=bot`
+  });
+});
+
+app.post('/api/bot/controls/send-message', async (req, res) => {
+  const { channelId, message } = req.body;
+
+  if (!client || !client.isReady()) {
+    return res.status(503).json({ success: false, message: 'Bot is not online' });
+  }
+
+  if (!channelId || !message) {
+    return res.status(400).json({ success: false, message: 'channelId and message are required' });
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+      return res.status(400).json({ success: false, message: 'Invalid text channel' });
+    }
+
+    await channel.send({ content: String(message).slice(0, 2000) });
+    res.json({ success: true, message: 'Message sent successfully' });
+  } catch (error) {
+    console.error('Send message error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to send message' });
+  }
+});
+
+app.post('/api/bot/controls/send-embed', async (req, res) => {
+  const { channelId, title, description, color } = req.body;
+
+  if (!client || !client.isReady()) {
+    return res.status(503).json({ success: false, message: 'Bot is not online' });
+  }
+
+  if (!channelId || !title || !description) {
+    return res.status(400).json({
+      success: false,
+      message: 'channelId, title, and description are required'
+    });
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+      return res.status(400).json({ success: false, message: 'Invalid text channel' });
+    }
+
+    const normalized = String(color || '').replace('#', '').trim();
+    const parsedColor = /^[0-9a-fA-F]{6}$/.test(normalized)
+      ? parseInt(normalized, 16)
+      : LIGHT_BLUE;
+
+    const embed = new EmbedBuilder()
+      .setColor(parsedColor)
+      .setTitle(String(title).slice(0, 256))
+      .setDescription(String(description).slice(0, 4096))
+      .setTimestamp();
+
+    await channel.send({ embeds: [embed] });
+    res.json({ success: true, message: 'Embed sent successfully' });
+  } catch (error) {
+    console.error('Send embed error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to send embed' });
+  }
+});
+
+app.post('/api/bot/controls/send-image', async (req, res) => {
+  const { channelId, imageUrl, caption } = req.body;
+
+  if (!client || !client.isReady()) {
+    return res.status(503).json({ success: false, message: 'Bot is not online' });
+  }
+
+  if (!channelId || !imageUrl) {
+    return res.status(400).json({ success: false, message: 'channelId and imageUrl are required' });
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+      return res.status(400).json({ success: false, message: 'Invalid text channel' });
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(LIGHT_BLUE)
+      .setImage(String(imageUrl).trim())
+      .setTimestamp();
+
+    await channel.send({
+      content: caption ? String(caption).slice(0, 2000) : undefined,
+      embeds: [embed]
+    });
+
+    res.json({ success: true, message: 'Image sent successfully' });
+  } catch (error) {
+    console.error('Send image error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to send image' });
+  }
+});
+
 // API: Get list of source files
 app.get('/api/source/files', (req, res) => {
   try {

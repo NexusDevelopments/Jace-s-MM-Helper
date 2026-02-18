@@ -30,9 +30,10 @@ function HomePage() {
       <div className="background-bubbles">
         {[...Array(15)].map((_, i) => (
           <div key={i} className="bubble" style={{
+            top: `${Math.random() * 100}%`,
             left: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 10}s`,
-            animationDuration: `${15 + Math.random() * 10}s`
+            animationDelay: `${Math.random() * -20}s`,
+            animationDuration: `${14 + Math.random() * 10}s`
           }}></div>
         ))}
       </div>
