@@ -18,6 +18,7 @@ const {
 const LIGHT_BLUE = 0x87cefa;
 const PREFIX = 'j$';
 const OWNER_ID = '1435310225010987088';
+const DEFAULT_MOVEMENT_LOG_CHANNEL_ID = '1473485037876809915';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const PORT = process.env.PORT || 3000;
@@ -1112,7 +1113,7 @@ app.post('/api/bot/controls/movement', async (req, res) => {
 
     const reportText = reportLines.join('\n').slice(0, 1800);
 
-    const destinationLogChannelId = logChannelId || LOG_CHANNEL_ID;
+    const destinationLogChannelId = logChannelId || LOG_CHANNEL_ID || DEFAULT_MOVEMENT_LOG_CHANNEL_ID;
     if (destinationLogChannelId) {
       const destination = await guild.channels.fetch(String(destinationLogChannelId)).catch(() => null);
       if (destination && destination.isTextBased() && typeof destination.send === 'function') {
