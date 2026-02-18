@@ -46,14 +46,14 @@ function HomePage() {
             fontWeight: '900',
             letterSpacing: '-1px'
           }}>
-            Securify Dashboard
+            Securify is going global
           </h1>
           <p style={{ opacity: 0.7, marginBottom: '1.2rem' }}>
-            Manage your bot from the side panel.
+            The process for being global, meaning people being able to add the bot to their own server with the same commands but secure with automodding, ticket systems, etc, will be coming soon. ETA March 2026.
           </p>
           <div className="card" style={{ maxWidth: '760px' }}>
             <p style={{ opacity: 0.78, lineHeight: '1.7' }}>
-              Use the navigation panel on the left to access bot status, controls, invites, and source tools.
+              This bot is for Jace's MM Server right now. Created by CrxxrDev. All rights reserved.
             </p>
           </div>
         </main>
