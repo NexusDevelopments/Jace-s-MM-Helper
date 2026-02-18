@@ -105,21 +105,26 @@ body {
   filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.45));
 }
 
-.dashboard-layout {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 24px;
-  align-items: start;
-  padding-top: 24px;
+.app-shell {
+  position: relative;
 }
 
-.side-panel {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+.global-side-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 260px;
+  overflow-y: auto;
+  background: rgba(36, 41, 48, 0.95);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
   padding: 16px;
-  position: sticky;
-  top: 18px;
+  z-index: 20;
+}
+
+.global-page-region {
+  margin-left: 260px;
+  min-height: 100vh;
 }
 
 .side-brand {
@@ -162,6 +167,11 @@ body {
 .side-link:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.22);
+}
+
+.side-link.active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .main-content {
@@ -522,17 +532,15 @@ body {
 
 /* Mobile Responsive for Home Buttons */
 @media (max-width: 768px) {
-  .dashboard-layout {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .side-panel {
+  .global-side-panel {
     position: static;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
 
-  .main-content {
-    min-height: auto;
+  .global-page-region {
+    margin-left: 0;
   }
 
   .home-btn {

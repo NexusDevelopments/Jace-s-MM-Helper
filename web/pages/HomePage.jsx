@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import logo from '../assets/securify-logo.svg';
 
 function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -40,25 +38,8 @@ function HomePage() {
       </div>
       <div className="grid-lines"></div>
 
-      <div className="container dashboard-layout">
-        <aside className="side-panel fade-in">
-          <div className="side-brand">
-            <img src={logo} alt="Securify logo" className="home-logo" />
-            <div className="side-brand-text">Securify</div>
-          </div>
-
-          <div className="side-section">Navigation</div>
-          <nav className="side-nav">
-            <Link to="/botstatus" className="side-link">Bot Status</Link>
-            <Link to="/serverstats" className="side-link">Server Stats</Link>
-            <Link to="/invite" className="side-link">Invite Bot</Link>
-            <Link to="/botcontrols" className="side-link">Bot Controls</Link>
-            <Link to="/tickets" className="side-link">Tickets</Link>
-            <Link to="/source" className="side-link">Source Code</Link>
-          </nav>
-        </aside>
-
-        <main className="main-content fade-in">
+      <div className="container">
+        <main className="main-content fade-in" style={{ paddingTop: '40px' }}>
           <h1 style={{
             fontSize: 'clamp(2.2rem, 6vw, 4rem)',
             marginBottom: '0.7rem',
