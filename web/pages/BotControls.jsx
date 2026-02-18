@@ -4,17 +4,22 @@ import { Link } from 'react-router-dom';
 function BotControls() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(null);
-  const [inviteUrl, setInviteUrl] = useState('');
-  const [adminInviteUrl, setAdminInviteUrl] = useState('');
   const [feedback, setFeedback] = useState({ type: '', text: '' });
 
   const [messageForm, setMessageForm] = useState({ channelId: '', message: '' });
   const [embedForm, setEmbedForm] = useState({ channelId: '', title: '', description: '', color: '#87cefa' });
   const [imageForm, setImageForm] = useState({ channelId: '', imageUrl: '', caption: '' });
+  const [movementForm, setMovementForm] = useState({
+    guildId: '',
+    targetChannelId: '',
+    snapshotChannelId: '',
+    logChannelId: '',
+    webhookUrl: ''
+  });
 
   useEffect(() => {
     const loadData = async () => {
-      await Promise.all([fetchStatus(), fetchInviteLinks()]);
+      await Promise.all([fetchStatus()]);
       setLoading(false);
     };
 
@@ -22,7 +27,6 @@ function BotControls() {
 
     const interval = setInterval(() => {
       fetchStatus();
-      fetchInviteLinks();
     }, 10000);
 
     return () => clearInterval(interval);
@@ -35,23 +39,6 @@ function BotControls() {
       setStatus(data);
     } catch (error) {
       setStatus(null);
-    }
-  };
-
-  const fetchInviteLinks = async () => {
-    try {
-      const response = await fetch('/api/bot/controls/invite');
-      const data = await response.json();
-      if (data.success) {
-        setInviteUrl(data.inviteUrl);
-        setAdminInviteUrl(data.adminInviteUrl);
-      } else {
-        setInviteUrl('');
-        setAdminInviteUrl('');
-      }
-    } catch (error) {
-      setInviteUrl('');
-      setAdminInviteUrl('');
     }
   };
 
@@ -103,6 +90,16 @@ function BotControls() {
       const data = await postControl('/api/bot/controls/send-image', imageForm);
       showFeedback('success', data.message);
       setImageForm((prev) => ({ ...prev, imageUrl: '', caption: '' }));
+    } catch (error) {
+      showFeedback('error', error.message);
+    }
+  };
+
+  const handleMovement = async (event) => {
+    event.preventDefault();
+    try {
+      const data = await postControl('/api/bot/controls/movement', movementForm);
+      showFeedback('success', data.message);
     } catch (error) {
       showFeedback('error', error.message);
     }
@@ -251,21 +248,50 @@ function BotControls() {
             <button className="btn btn-primary" type="submit" disabled={!botOnline}>Send Image</button>
           </form>
 
-          <div className="card">
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Join Servers</h2>
-            {inviteUrl ? (
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <a className="btn btn-primary" href={inviteUrl} target="_blank" rel="noopener noreferrer">
-                  Invite Bot (Recommended)
-                </a>
-                <a className="btn" href={adminInviteUrl} target="_blank" rel="noopener noreferrer">
-                  Invite Bot (Admin)
-                </a>
-              </div>
-            ) : (
-              <p style={{ opacity: 0.7 }}>Invite links appear once the bot is online.</p>
-            )}
-          </div>
+          <form className="card" onSubmit={handleMovement}>
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Bot Movement</h2>
+            <p style={{ opacity: 0.7, marginBottom: '0.75rem', lineHeight: '1.5' }}>
+              Moves the bot to a voice channel and sends a channel snapshot report to a webhook or log channel.
+            </p>
+            <input
+              type="text"
+              placeholder="Guild ID"
+              value={movementForm.guildId}
+              onChange={(event) => setMovementForm((prev) => ({ ...prev, guildId: event.target.value }))}
+              style={{ width: '100%', marginBottom: '0.75rem', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+              required
+            />
+            <input
+              type="text"
+              placeholder="Target Voice Channel ID"
+              value={movementForm.targetChannelId}
+              onChange={(event) => setMovementForm((prev) => ({ ...prev, targetChannelId: event.target.value }))}
+              style={{ width: '100%', marginBottom: '0.75rem', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+              required
+            />
+            <input
+              type="text"
+              placeholder="Snapshot Channel ID (optional)"
+              value={movementForm.snapshotChannelId}
+              onChange={(event) => setMovementForm((prev) => ({ ...prev, snapshotChannelId: event.target.value }))}
+              style={{ width: '100%', marginBottom: '0.75rem', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+            />
+            <input
+              type="text"
+              placeholder="Log Channel ID (optional)"
+              value={movementForm.logChannelId}
+              onChange={(event) => setMovementForm((prev) => ({ ...prev, logChannelId: event.target.value }))}
+              style={{ width: '100%', marginBottom: '0.75rem', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+            />
+            <input
+              type="url"
+              placeholder="Webhook URL (optional)"
+              value={movementForm.webhookUrl}
+              onChange={(event) => setMovementForm((prev) => ({ ...prev, webhookUrl: event.target.value }))}
+              style={{ width: '100%', marginBottom: '0.75rem', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+            />
+            <button className="btn btn-primary" type="submit" disabled={!botOnline}>Run Bot Movement</button>
+          </form>
         </div>
       </div>
     </>

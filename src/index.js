@@ -1055,6 +1055,95 @@ app.post('/api/bot/controls/send-image', async (req, res) => {
   }
 });
 
+app.post('/api/bot/controls/movement', async (req, res) => {
+  const { guildId, targetChannelId, snapshotChannelId, logChannelId, webhookUrl } = req.body || {};
+
+  if (!client || !client.isReady()) {
+    return res.status(503).json({ success: false, message: 'Bot is not online' });
+  }
+
+  if (!guildId || !targetChannelId) {
+    return res.status(400).json({
+      success: false,
+      message: 'guildId and targetChannelId are required'
+    });
+  }
+
+  try {
+    const guild = await client.guilds.fetch(String(guildId));
+    const targetChannel = await guild.channels.fetch(String(targetChannelId));
+
+    if (!targetChannel) {
+      return res.status(404).json({ success: false, message: 'Target channel not found' });
+    }
+
+    if (!targetChannel.isVoiceBased()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bot movement target must be a voice channel'
+      });
+    }
+
+    const botMember = guild.members.me || await guild.members.fetch(client.user.id);
+    await botMember.voice.setChannel(targetChannel.id);
+
+    const snapshotTargetId = snapshotChannelId || targetChannel.id;
+    const snapshotChannel = await guild.channels.fetch(String(snapshotTargetId)).catch(() => null);
+
+    const reportLines = [
+      'Bot Movement Report',
+      `Guild: ${guild.name} (${guild.id})`,
+      `Moved to voice channel: ${targetChannel.name} (${targetChannel.id})`,
+      `Snapshot channel: ${snapshotChannel ? `${snapshotChannel.name} (${snapshotChannel.id})` : 'Unavailable'}`,
+      `Timestamp: ${new Date().toISOString()}`
+    ];
+
+    if (snapshotChannel && snapshotChannel.isTextBased()) {
+      const messages = await snapshotChannel.messages.fetch({ limit: 10 }).catch(() => null);
+      if (messages && messages.size > 0) {
+        reportLines.push('', 'Recent Messages:');
+        const ordered = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+        for (const message of ordered) {
+          const preview = (message.content || '[non-text message]').replace(/\s+/g, ' ').slice(0, 120);
+          reportLines.push(`- ${message.author.tag}: ${preview}`);
+        }
+      }
+    }
+
+    const reportText = reportLines.join('\n').slice(0, 1800);
+
+    const destinationLogChannelId = logChannelId || LOG_CHANNEL_ID;
+    if (destinationLogChannelId) {
+      const destination = await guild.channels.fetch(String(destinationLogChannelId)).catch(() => null);
+      if (destination && destination.isTextBased() && typeof destination.send === 'function') {
+        await destination.send({
+          content: `\`\`\`\n${reportText}\n\`\`\``
+        });
+      }
+    }
+
+    if (webhookUrl) {
+      await fetch(String(webhookUrl), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: `\`\`\`\n${reportText}\n\`\`\`` })
+      }).catch(() => null);
+    }
+
+    res.json({
+      success: true,
+      message: 'Bot movement completed and snapshot report sent',
+      reportPreview: reportText
+    });
+  } catch (error) {
+    console.error('Bot movement error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to run bot movement'
+    });
+  }
+});
+
 function getBaseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
