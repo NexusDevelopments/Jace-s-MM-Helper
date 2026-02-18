@@ -33,6 +33,16 @@ let serverStartTime = Date.now();
 let autoStarted = false;
 let client = null;
 let sessionCleanupInterval = null;
+let globalBotSetup = {
+  companyName: 'Securify',
+  clientId: '',
+  clientSecret: '',
+  botToken: '',
+  redirectUri: '',
+  scopes: 'identify guilds',
+  configured: false,
+  updatedAt: null
+};
 
 function createClient() {
   return new Client({
@@ -1028,6 +1038,75 @@ app.post('/api/bot/controls/send-image', async (req, res) => {
     console.error('Send image error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to send image' });
   }
+});
+
+// API: Global bot onboarding setup (MVP)
+app.get('/api/global/setup', (req, res) => {
+  const hasClientId = Boolean(globalBotSetup.clientId);
+  const redirectUri = globalBotSetup.redirectUri || `http://localhost:${PORT}/global`;
+  const oauthUrl = hasClientId
+    ? `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(globalBotSetup.clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(globalBotSetup.scopes)}`
+    : null;
+
+  res.json({
+    success: true,
+    setup: {
+      companyName: globalBotSetup.companyName,
+      clientId: globalBotSetup.clientId,
+      redirectUri,
+      scopes: globalBotSetup.scopes,
+      configured: globalBotSetup.configured,
+      hasClientSecret: Boolean(globalBotSetup.clientSecret),
+      hasBotToken: Boolean(globalBotSetup.botToken),
+      updatedAt: globalBotSetup.updatedAt
+    },
+    oauthUrl,
+    commandCatalog: [
+      'Moderation',
+      'Auto moderation',
+      'Role management',
+      'Welcome & goodbye',
+      'Logging',
+      'Utility'
+    ]
+  });
+});
+
+app.post('/api/global/setup', (req, res) => {
+  const {
+    companyName,
+    clientId,
+    clientSecret,
+    botToken,
+    redirectUri,
+    scopes
+  } = req.body || {};
+
+  if (!clientId || !clientSecret || !botToken) {
+    return res.status(400).json({
+      success: false,
+      message: 'clientId, clientSecret, and botToken are required'
+    });
+  }
+
+  globalBotSetup = {
+    companyName: String(companyName || 'Securify').trim() || 'Securify',
+    clientId: String(clientId).trim(),
+    clientSecret: String(clientSecret).trim(),
+    botToken: String(botToken).trim(),
+    redirectUri: String(redirectUri || `http://localhost:${PORT}/global`).trim(),
+    scopes: String(scopes || 'identify guilds').trim() || 'identify guilds',
+    configured: true,
+    updatedAt: Date.now()
+  };
+
+  const oauthUrl = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(globalBotSetup.clientId)}&response_type=code&redirect_uri=${encodeURIComponent(globalBotSetup.redirectUri)}&scope=${encodeURIComponent(globalBotSetup.scopes)}`;
+
+  res.json({
+    success: true,
+    message: 'Global bot setup saved',
+    oauthUrl
+  });
 });
 
 // API: Get list of source files

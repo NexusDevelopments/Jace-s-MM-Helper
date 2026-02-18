@@ -6,6 +6,7 @@ import InviteBot from './pages/InviteBot';
 import SourceCode from './pages/SourceCode';
 import Tickets from './pages/Tickets';
 import BotControls from './pages/BotControls';
+import GlobalSetup from './pages/GlobalSetup';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/source" element={<SourceCode />} />
         <Route path="/tickets" element={<Tickets />} />
         <Route path="/botcontrols" element={<BotControls />} />
+        <Route path="/global" element={<GlobalSetup />} />
       </Routes>
     </Router>
   );
