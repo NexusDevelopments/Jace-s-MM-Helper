@@ -40,95 +40,42 @@ function HomePage() {
       </div>
       <div className="grid-lines"></div>
 
-      <div className="container" style={{
-        justifyContent: 'center',
-        alignItems: 'center',
-        textAlign: 'center'
-      }}>
-        <div className="fade-in">
-          <img src={logo} alt="Securify logo" className="home-logo" />
-          <h1 style={{
-            fontSize: 'clamp(2.5rem, 8vw, 5rem)',
-            marginBottom: '0.5rem',
-            fontWeight: '900',
-            letterSpacing: '-2px',
-            textTransform: 'uppercase',
-            background: 'linear-gradient(135deg, #fff 0%, #888 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            textShadow: '0 0 80px rgba(255, 255, 255, 0.3)'
-          }}>
-            Securify
-          </h1>
-
-          <p style={{
-            fontSize: '1rem',
-            opacity: 0.6,
-            marginBottom: '3rem',
-            letterSpacing: '2px',
-            fontWeight: '300'
-          }}>
-            Discord Management Made Easy
-          </p>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '1.2rem',
-            maxWidth: '900px',
-            margin: '0 auto',
-            padding: '0 20px'
-          }}>
-            <Link to="/botstatus" className="home-btn btn-glass">
-              <span className="btn-text">
-                <span className="btn-title">Bot Status</span>
-                <span className="btn-subtitle">Monitor bot activity</span>
-              </span>
-              <span className="btn-arrow">→</span>
-            </Link>
-
-            <Link to="/serverstats" className="home-btn btn-glass">
-              <span className="btn-text">
-                <span className="btn-title">Server Stats</span>
-                <span className="btn-subtitle">View server info</span>
-              </span>
-              <span className="btn-arrow">→</span>
-            </Link>
-
-            <Link to="/invite" className="home-btn btn-glass">
-              <span className="btn-text">
-                <span className="btn-title">Invite Bot</span>
-                <span className="btn-subtitle">Add to your server</span>
-              </span>
-              <span className="btn-arrow">→</span>
-            </Link>
-
-            <Link to="/tickets" className="home-btn btn-glass">
-              <span className="btn-text">
-                <span className="btn-title">Tickets</span>
-                <span className="btn-subtitle">Support system</span>
-              </span>
-              <span className="btn-arrow">→</span>
-            </Link>
-
-            <Link to="/botcontrols" className="home-btn btn-glass">
-              <span className="btn-text">
-                <span className="btn-title">Bot Controls</span>
-                <span className="btn-subtitle">Advanced features</span>
-              </span>
-              <span className="btn-arrow">→</span>
-            </Link>
-
-            <Link to="/source" className="home-btn btn-glass">
-              <span className="btn-text">
-                <span className="btn-title">Source Code</span>
-                <span className="btn-subtitle">View repository</span>
-              </span>
-              <span className="btn-arrow">→</span>
-            </Link>
+      <div className="container dashboard-layout">
+        <aside className="side-panel fade-in">
+          <div className="side-brand">
+            <img src={logo} alt="Securify logo" className="home-logo" />
+            <div className="side-brand-text">Securify</div>
           </div>
-        </div>
+
+          <div className="side-section">Navigation</div>
+          <nav className="side-nav">
+            <Link to="/botstatus" className="side-link">Bot Status</Link>
+            <Link to="/serverstats" className="side-link">Server Stats</Link>
+            <Link to="/invite" className="side-link">Invite Bot</Link>
+            <Link to="/botcontrols" className="side-link">Bot Controls</Link>
+            <Link to="/tickets" className="side-link">Tickets</Link>
+            <Link to="/source" className="side-link">Source Code</Link>
+          </nav>
+        </aside>
+
+        <main className="main-content fade-in">
+          <h1 style={{
+            fontSize: 'clamp(2.2rem, 6vw, 4rem)',
+            marginBottom: '0.7rem',
+            fontWeight: '900',
+            letterSpacing: '-1px'
+          }}>
+            Securify Dashboard
+          </h1>
+          <p style={{ opacity: 0.7, marginBottom: '1.2rem' }}>
+            Manage your bot from the side panel.
+          </p>
+          <div className="card" style={{ maxWidth: '760px' }}>
+            <p style={{ opacity: 0.78, lineHeight: '1.7' }}>
+              Use the navigation panel on the left to access bot status, controls, invites, and source tools.
+            </p>
+          </div>
+        </main>
       </div>
     </>
   );
