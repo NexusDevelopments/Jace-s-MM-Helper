@@ -1,35 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import logo from '../assets/securify-logo.svg';
 
 function HomePage() {
   const [loading, setLoading] = useState(true);
-  const [showAnnouncement, setShowAnnouncement] = useState(true);
-  const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
     // Simulate brief loading for consistent UX
     const timer = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (!showAnnouncement) return;
-
-    const startedAt = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-      const remaining = Math.max(0, 10 - elapsed);
-      setCountdown(remaining);
-
-      if (remaining <= 0) {
-        setShowAnnouncement(false);
-        clearInterval(interval);
-      }
-    }, 200);
-
-    return () => clearInterval(interval);
-  }, [showAnnouncement]);
 
   if (loading) {
     return (
@@ -60,88 +39,94 @@ function HomePage() {
       </div>
       <div className="grid-lines"></div>
 
-      {showAnnouncement && (
-        <div className="rebrand-overlay">
-          <div className="rebrand-card">
-            <h2>There will be a Full Rebrand making this a global bot.</h2>
-            <p>Launching Securify global mode in {countdown}s</p>
-            <div className="rebrand-progress">
-              <div className="rebrand-progress-fill" style={{ width: `${(countdown / 10) * 100}%` }}></div>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="container home-shell">
-        <aside className="home-sidebar fade-in">
-          <img src={logo} alt="Securify logo" className="home-logo" />
-          <div className="home-brand">Securify</div>
-          <p className="home-brand-sub">Corporation for Discord</p>
+      <div className="container" style={{
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center'
+      }}>
+        <div className="fade-in">
+          <h1 style={{
+            fontSize: 'clamp(2.5rem, 8vw, 5rem)',
+            marginBottom: '0.5rem',
+            fontWeight: '900',
+            letterSpacing: '-2px',
+            textTransform: 'uppercase',
+            background: 'linear-gradient(135deg, #fff 0%, #888 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textShadow: '0 0 80px rgba(255, 255, 255, 0.3)'
+          }}>
+            Jace's MM Helper
+          </h1>
 
-          <nav className="home-tab-nav">
-            <Link to="/global" className="home-tab-link">Global Setup</Link>
-            <Link to="/botstatus" className="home-tab-link">Bot Status</Link>
-            <Link to="/serverstats" className="home-tab-link">Server Stats</Link>
-            <Link to="/botcontrols" className="home-tab-link">Bot Controls</Link>
-            <Link to="/invite" className="home-tab-link">Invite Bot</Link>
-            <Link to="/tickets" className="home-tab-link">Tickets</Link>
-            <Link to="/source" className="home-tab-link">Source Code</Link>
-          </nav>
-        </aside>
-
-        <main className="home-main fade-in">
-          <h1 className="home-main-title">Securify</h1>
-          <p className="home-main-subtitle">
-            Global moderation and security platform for Discord communities.
+          <p style={{
+            fontSize: '1rem',
+            opacity: 0.6,
+            marginBottom: '3rem',
+            letterSpacing: '2px',
+            fontWeight: '300'
+          }}>
+            Discord Management Made Easy
           </p>
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <Link to="/global" className="btn btn-primary">Sign in with Discord</Link>
-            <Link to="/botcontrols" className="btn">Open Command Console</Link>
-          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '1.2rem',
+            maxWidth: '900px',
+            margin: '0 auto',
+            padding: '0 20px'
+          }}>
+            <Link to="/botstatus" className="home-btn btn-glass">
+              <span className="btn-text">
+                <span className="btn-title">Bot Status</span>
+                <span className="btn-subtitle">Monitor bot activity</span>
+              </span>
+              <span className="btn-arrow">→</span>
+            </Link>
 
-          <div className="home-metrics">
-            <div className="home-metric-card">
-              <div className="home-metric-value">24/7</div>
-              <div className="home-metric-label">Threat monitoring</div>
-            </div>
-            <div className="home-metric-card">
-              <div className="home-metric-value">7</div>
-              <div className="home-metric-label">Command modules</div>
-            </div>
-            <div className="home-metric-card">
-              <div className="home-metric-value">1-click</div>
-              <div className="home-metric-label">Discord onboarding</div>
-            </div>
-          </div>
+            <Link to="/serverstats" className="home-btn btn-glass">
+              <span className="btn-text">
+                <span className="btn-title">Server Stats</span>
+                <span className="btn-subtitle">View server info</span>
+              </span>
+              <span className="btn-arrow">→</span>
+            </Link>
 
-          <div className="home-feature-grid">
-            <div className="card">
-              <h2 style={{ marginBottom: '0.5rem' }}>Auto moderation</h2>
-              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
-                Filter spam, mass mentions, dangerous links, and suspicious behavior in real-time.
-              </p>
-            </div>
-            <div className="card">
-              <h2 style={{ marginBottom: '0.5rem' }}>Anti-raid protection</h2>
-              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
-                Lock down channels, rate-limit joins, and enforce verification during attacks.
-              </p>
-            </div>
-            <div className="card">
-              <h2 style={{ marginBottom: '0.5rem' }}>Audit logging</h2>
-              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
-                Keep complete moderation logs and role-history trails for accountability.
-              </p>
-            </div>
-            <div className="card">
-              <h2 style={{ marginBottom: '0.5rem' }}>Global command center</h2>
-              <p style={{ opacity: 0.75, lineHeight: '1.6' }}>
-                Configure OAuth, credentials, and module toggles from one centralized dashboard.
-              </p>
-            </div>
+            <Link to="/invite" className="home-btn btn-glass">
+              <span className="btn-text">
+                <span className="btn-title">Invite Bot</span>
+                <span className="btn-subtitle">Add to your server</span>
+              </span>
+              <span className="btn-arrow">→</span>
+            </Link>
+
+            <Link to="/tickets" className="home-btn btn-glass">
+              <span className="btn-text">
+                <span className="btn-title">Tickets</span>
+                <span className="btn-subtitle">Support system</span>
+              </span>
+              <span className="btn-arrow">→</span>
+            </Link>
+
+            <Link to="/botcontrols" className="home-btn btn-glass">
+              <span className="btn-text">
+                <span className="btn-title">Bot Controls</span>
+                <span className="btn-subtitle">Advanced features</span>
+              </span>
+              <span className="btn-arrow">→</span>
+            </Link>
+
+            <Link to="/source" className="home-btn btn-glass">
+              <span className="btn-text">
+                <span className="btn-title">Source Code</span>
+                <span className="btn-subtitle">View repository</span>
+              </span>
+              <span className="btn-arrow">→</span>
+            </Link>
           </div>
-        </main>
+        </div>
       </div>
     </>
   );
