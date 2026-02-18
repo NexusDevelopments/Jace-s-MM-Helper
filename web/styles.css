@@ -50,6 +50,14 @@ body {
   color: #efefef;
 }
 
+.home-logo {
+  width: 86px;
+  height: 86px;
+  display: block;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.4));
+}
+
 .home-brand-sub {
   opacity: 0.7;
   margin: 6px 0 18px;

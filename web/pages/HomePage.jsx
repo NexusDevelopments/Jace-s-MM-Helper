@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import logo from '../assets/securify-logo.svg';
 
 function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -73,6 +74,7 @@ function HomePage() {
       
       <div className="container home-shell">
         <aside className="home-sidebar fade-in">
+          <img src={logo} alt="Securify logo" className="home-logo" />
           <div className="home-brand">Securify</div>
           <p className="home-brand-sub">Corporation for Discord</p>
 
