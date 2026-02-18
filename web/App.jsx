@@ -6,6 +6,7 @@ import InviteBot from './pages/InviteBot';
 import SourceCode from './pages/SourceCode';
 import Tickets from './pages/Tickets';
 import BotControls from './pages/BotControls';
+import Logs from './pages/Logs';
 import logo from './assets/securify-logo.svg';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
             <NavLink to="/invite" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Invite Bot</NavLink>
             <NavLink to="/botcontrols" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Bot Controls</NavLink>
             <NavLink to="/tickets" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Tickets</NavLink>
+            <NavLink to="/logs" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Logs</NavLink>
             <NavLink to="/source" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Source Code</NavLink>
           </nav>
         </aside>
@@ -37,6 +39,7 @@ function App() {
             <Route path="/invite" element={<InviteBot />} />
             <Route path="/source" element={<SourceCode />} />
             <Route path="/tickets" element={<Tickets />} />
+            <Route path="/logs" element={<Logs />} />
             <Route path="/botcontrols" element={<BotControls />} />
           </Routes>
         </div>

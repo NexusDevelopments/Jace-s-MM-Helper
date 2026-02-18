@@ -7,10 +7,12 @@ const {
   AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelType,
   Client,
   EmbedBuilder,
   GatewayIntentBits,
   ModalBuilder,
+  PermissionFlagsBits,
   TextInputBuilder,
   TextInputStyle
 } = require('discord.js');
@@ -27,6 +29,7 @@ const ALLOWED_ROLE_IDS = (process.env.ALLOWED_ROLE_IDS || '')
   .map((roleId) => roleId.trim())
   .filter(Boolean);
 const SESSION_TTL_MS = 10 * 60 * 1000;
+const TICKETS_STATE_PATH = path.join(__dirname, '..', 'data', 'tickets-state.json');
 
 const sessions = new Map();
 let botStartTime = null;
@@ -34,6 +37,38 @@ let serverStartTime = Date.now();
 let autoStarted = false;
 let client = null;
 let sessionCleanupInterval = null;
+let ticketsState = {
+  configs: {},
+  counters: {},
+  openTickets: {}
+};
+
+function loadTicketsState() {
+  if (!fs.existsSync(TICKETS_STATE_PATH)) return;
+
+  try {
+    const raw = fs.readFileSync(TICKETS_STATE_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    ticketsState = {
+      configs: parsed.configs || {},
+      counters: parsed.counters || {},
+      openTickets: parsed.openTickets || {}
+    };
+  } catch (error) {
+    console.error('Failed to load tickets state:', error);
+  }
+}
+
+function saveTicketsState() {
+  try {
+    fs.mkdirSync(path.dirname(TICKETS_STATE_PATH), { recursive: true });
+    fs.writeFileSync(TICKETS_STATE_PATH, JSON.stringify(ticketsState, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Failed to save tickets state:', error);
+  }
+}
+
+loadTicketsState();
 
 function createClient() {
   return new Client({
@@ -198,6 +233,205 @@ function getPromoStartPayload() {
   return { embeds: [embed], components: [row] };
 }
 
+function parseDiscordId(input) {
+  if (!input) return null;
+  const match = String(input).match(/\d{17,20}/);
+  return match ? match[0] : null;
+}
+
+function getTicketConfig(guildId) {
+  return ticketsState.configs[guildId] || null;
+}
+
+function setTicketConfig(guildId, config) {
+  ticketsState.configs[guildId] = {
+    ...ticketsState.configs[guildId],
+    ...config,
+    updatedAt: Date.now()
+  };
+  saveTicketsState();
+}
+
+function getNextTicketNumber(guildId) {
+  const next = (ticketsState.counters[guildId] || 0) + 1;
+  ticketsState.counters[guildId] = next;
+  saveTicketsState();
+  return next;
+}
+
+function getTicketPanelPayload(config) {
+  const embed = new EmbedBuilder()
+    .setColor(LIGHT_BLUE)
+    .setTitle(config.panelTitle || 'Support Tickets')
+    .setDescription(
+      config.panelDescription ||
+      'Need help? Click **Open Ticket** and our team will assist you.'
+    )
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_open')
+      .setLabel('Open Ticket')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+async function sendTicketPanel(guild, config) {
+  const panelChannel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
+  if (!panelChannel || !panelChannel.isTextBased() || typeof panelChannel.send !== 'function') {
+    throw new Error('Configured panel channel is invalid or not text-based');
+  }
+
+  await panelChannel.send(getTicketPanelPayload(config));
+}
+
+function buildTicketPermissionOverwrites(guild, openerId, supportRoleId) {
+  const overwrites = [
+    {
+      id: guild.id,
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    {
+      id: openerId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks
+      ]
+    },
+    {
+      id: client.user.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks
+      ]
+    }
+  ];
+
+  if (supportRoleId) {
+    overwrites.push({
+      id: supportRoleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks
+      ]
+    });
+  }
+
+  return overwrites;
+}
+
+async function createTicketForUser(guild, userId) {
+  const config = getTicketConfig(guild.id);
+  if (!config) {
+    throw new Error('Ticket system is not configured for this server');
+  }
+
+  const existing = Object.entries(ticketsState.openTickets).find(
+    ([, ticket]) => ticket.guildId === guild.id && ticket.openerId === userId
+  );
+
+  if (existing) {
+    const existingChannel = await guild.channels.fetch(existing[0]).catch(() => null);
+    if (existingChannel) return existingChannel;
+    delete ticketsState.openTickets[existing[0]];
+    saveTicketsState();
+  }
+
+  const ticketNumber = getNextTicketNumber(guild.id);
+  const channelName = `ticket-${String(ticketNumber).padStart(4, '0')}`;
+
+  const channel = await guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: config.categoryId || null,
+    permissionOverwrites: buildTicketPermissionOverwrites(guild, userId, config.supportRoleId || null),
+    topic: `Ticket ${ticketNumber} | Opened by ${userId}`
+  });
+
+  ticketsState.openTickets[channel.id] = {
+    guildId: guild.id,
+    openerId: userId,
+    ticketNumber,
+    createdAt: Date.now()
+  };
+  saveTicketsState();
+
+  const openEmbed = new EmbedBuilder()
+    .setColor(LIGHT_BLUE)
+    .setTitle(`Ticket #${ticketNumber}`)
+    .setDescription('Support will be with you shortly. Use the button below to close this ticket when resolved.')
+    .setTimestamp();
+
+  const closeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_close')
+      .setLabel('Close Ticket')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await channel.send({ content: `<@${userId}>`, embeds: [openEmbed], components: [closeRow] });
+
+  return channel;
+}
+
+async function closeTicketChannel(channel, closedByTag) {
+  const ticketMeta = ticketsState.openTickets[channel.id];
+  if (!ticketMeta) {
+    throw new Error('This channel is not tracked as an open ticket');
+  }
+
+  const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  const sorted = messages ? [...messages.values()].sort((left, right) => left.createdTimestamp - right.createdTimestamp) : [];
+  const transcriptLines = sorted.map((message) => {
+    const content = (message.content || '[non-text message]').replace(/\s+/g, ' ').trim();
+    return `[${new Date(message.createdTimestamp).toISOString()}] ${message.author.tag}: ${content || '[empty]'}`;
+  });
+
+  const transcriptAttachment = new AttachmentBuilder(Buffer.from(transcriptLines.join('\n') || 'No messages.', 'utf8'), {
+    name: `ticket-${ticketMeta.ticketNumber}-transcript.txt`
+  });
+
+  const config = getTicketConfig(ticketMeta.guildId);
+  const logTargetId = (config && config.logChannelId) || LOG_CHANNEL_ID || DEFAULT_MOVEMENT_LOG_CHANNEL_ID;
+
+  if (logTargetId) {
+    const logChannel = await channel.guild.channels.fetch(logTargetId).catch(() => null);
+    if (logChannel && logChannel.isTextBased() && typeof logChannel.send === 'function') {
+      const closeEmbed = new EmbedBuilder()
+        .setColor(LIGHT_BLUE)
+        .setTitle(`Ticket #${ticketMeta.ticketNumber} Closed`)
+        .addFields(
+          { name: 'Ticket channel', value: `${channel.name} (${channel.id})` },
+          { name: 'Opened by', value: `<@${ticketMeta.openerId}> (${ticketMeta.openerId})` },
+          { name: 'Closed by', value: closedByTag || 'Unknown' }
+        )
+        .setTimestamp();
+
+      await logChannel.send({ embeds: [closeEmbed], files: [transcriptAttachment] });
+    }
+  }
+
+  delete ticketsState.openTickets[channel.id];
+  saveTicketsState();
+
+  await channel.send('Closing ticket in 5 seconds...').catch(() => null);
+  await sleep(5000);
+  await channel.delete(`Ticket closed by ${closedByTag || 'unknown'}`).catch(() => null);
+}
+
 function setupBotHandlers() {
   client.removeAllListeners();
 
@@ -222,7 +456,8 @@ function setupBotHandlers() {
   client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.inGuild()) return;
 
-  const content = message.content.trim().toLowerCase();
+  const rawContent = message.content.trim();
+  const content = rawContent.toLowerCase();
   
   if (content.startsWith(`${PREFIX}demo`)) {
     if (!hasAllowedRole(message.member, message.author.id)) {
@@ -250,6 +485,7 @@ function setupBotHandlers() {
       .addFields(
         { name: 'j$demo', value: 'Demote users by removing their highest role and giving them the role one level down.' },
         { name: 'j$promo', value: 'Promote users by removing their highest role and giving them the role one level up.' },
+        { name: 'j$ticket help', value: 'Show ticket commands and usage.' },
         { name: 'j$help', value: 'Shows this help message with all available commands.' }
       )
       .setTimestamp();
@@ -257,10 +493,209 @@ function setupBotHandlers() {
     await message.reply({ embeds: [helpEmbed] });
     return;
   }
+
+  if (content.startsWith(`${PREFIX}ticket`)) {
+    const args = rawContent.slice(`${PREFIX}ticket`.length).trim().split(/\s+/).filter(Boolean);
+    const subcommand = (args[0] || 'help').toLowerCase();
+
+    if (subcommand === 'help') {
+      const ticketHelp = new EmbedBuilder()
+        .setColor(LIGHT_BLUE)
+        .setTitle('Ticket Commands')
+        .setDescription('Prefix: j$')
+        .addFields(
+          { name: 'j$ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]', value: 'Configure ticket system for this guild.' },
+          { name: 'j$ticket panel', value: 'Post the ticket creation panel in the configured panel channel.' },
+          { name: 'j$ticket create', value: 'Create a ticket for yourself.' },
+          { name: 'j$ticket close', value: 'Close the current ticket channel.' },
+          { name: 'j$ticket add <userId|@mention>', value: 'Grant access to a user in this ticket.' },
+          { name: 'j$ticket remove <userId|@mention>', value: 'Remove access from a user in this ticket.' },
+          { name: 'j$ticket transcript', value: 'Generate a transcript preview of recent messages.' }
+        )
+        .setTimestamp();
+
+      await message.reply({ embeds: [ticketHelp] });
+      return;
+    }
+
+    if (subcommand === 'create') {
+      const config = getTicketConfig(message.guild.id);
+      if (!config) {
+        await message.reply('Ticket system is not configured yet. Ask staff to run `j$ticket setup ...` first.');
+        return;
+      }
+
+      try {
+        const ticketChannel = await createTicketForUser(message.guild, message.author.id);
+        await message.reply(`✅ Ticket created: ${ticketChannel}`);
+      } catch (error) {
+        await message.reply(`❌ ${error.message || 'Failed to create ticket.'}`);
+      }
+      return;
+    }
+
+    if (!hasAllowedRole(message.member, message.author.id)) {
+      await message.reply('❌ You do not have permission to manage tickets. Administrator permissions required.');
+      return;
+    }
+
+    if (subcommand === 'setup') {
+      const panelChannelId = parseDiscordId(args[1]);
+      const categoryId = parseDiscordId(args[2]);
+      const supportRoleId = parseDiscordId(args[3]);
+      const logChannelId = parseDiscordId(args[4]);
+
+      if (!panelChannelId || !categoryId) {
+        await message.reply('Usage: `j$ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]`');
+        return;
+      }
+
+      setTicketConfig(message.guild.id, {
+        panelChannelId,
+        categoryId,
+        supportRoleId: supportRoleId || null,
+        logChannelId: logChannelId || null,
+        panelTitle: 'Support Tickets',
+        panelDescription: 'Need help? Click **Open Ticket** and our team will assist you.'
+      });
+
+      await message.reply('✅ Ticket configuration saved. Use `j$ticket panel` to deploy the panel.');
+      return;
+    }
+
+    if (subcommand === 'panel') {
+      const config = getTicketConfig(message.guild.id);
+      if (!config) {
+        await message.reply('Ticket system is not configured yet. Run `j$ticket setup ...` first.');
+        return;
+      }
+
+      try {
+        await sendTicketPanel(message.guild, config);
+        await message.reply('✅ Ticket panel deployed.');
+      } catch (error) {
+        await message.reply(`❌ ${error.message || 'Failed to send ticket panel.'}`);
+      }
+      return;
+    }
+
+    if (subcommand === 'close') {
+      if (!ticketsState.openTickets[message.channel.id]) {
+        await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      try {
+        await closeTicketChannel(message.channel, message.author.tag);
+      } catch (error) {
+        await message.reply(`❌ ${error.message || 'Failed to close ticket.'}`);
+      }
+      return;
+    }
+
+    if (subcommand === 'add' || subcommand === 'remove') {
+      const userId = parseDiscordId(args[1]);
+      if (!userId) {
+        await message.reply(`Usage: \`j$ticket ${subcommand} <userId|@mention>\``);
+        return;
+      }
+
+      if (!ticketsState.openTickets[message.channel.id]) {
+        await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      const perms = {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+        AttachFiles: true,
+        EmbedLinks: true
+      };
+
+      if (subcommand === 'add') {
+        await message.channel.permissionOverwrites.edit(userId, perms);
+        await message.reply(`✅ Added <@${userId}> to this ticket.`);
+      } else {
+        await message.channel.permissionOverwrites.delete(userId).catch(() => null);
+        await message.reply(`✅ Removed <@${userId}> from this ticket.`);
+      }
+      return;
+    }
+
+    if (subcommand === 'transcript') {
+      if (!ticketsState.openTickets[message.channel.id]) {
+        await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      const messages = await message.channel.messages.fetch({ limit: 30 }).catch(() => null);
+      const sorted = messages ? [...messages.values()].sort((left, right) => left.createdTimestamp - right.createdTimestamp) : [];
+      const lines = sorted.map((entry) => {
+        const contentLine = (entry.content || '[non-text message]').replace(/\s+/g, ' ').slice(0, 120);
+        return `${entry.author.tag}: ${contentLine}`;
+      });
+
+      const attachment = new AttachmentBuilder(Buffer.from(lines.join('\n') || 'No messages.', 'utf8'), {
+        name: `ticket-preview-${Date.now()}.txt`
+      });
+
+      await message.reply({ content: 'Transcript preview generated:', files: [attachment] });
+      return;
+    }
+
+    await message.reply('Unknown ticket command. Use `j$ticket help`.');
+    return;
+  }
 });
 
 client.on('interactionCreate', async (interaction) => {
   try {
+    if (interaction.isButton() && interaction.customId === 'ticket_open') {
+      const config = getTicketConfig(interaction.guildId);
+      if (!config) {
+        await interaction.reply({
+          content: 'Ticket system is not configured yet.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      const channel = await createTicketForUser(interaction.guild, interaction.user.id);
+      await interaction.reply({
+        content: `✅ Your ticket is ready: ${channel}`,
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === 'ticket_close') {
+      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      if (!ticketMeta) {
+        await interaction.reply({
+          content: 'This is not an active ticket channel.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      const canClose =
+        interaction.user.id === ticketMeta.openerId ||
+        hasAllowedRole(interaction.member, interaction.user.id);
+
+      if (!canClose) {
+        await interaction.reply({
+          content: 'You do not have permission to close this ticket.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      await interaction.reply({ content: 'Closing ticket...', ephemeral: true });
+      await closeTicketChannel(interaction.channel, interaction.user.tag);
+      return;
+    }
+
     if (interaction.isButton() && interaction.customId === 'demo_paste_ids') {
       const modal = new ModalBuilder().setCustomId('demo_ids_modal').setTitle('Paste IDs');
 
@@ -1117,6 +1552,70 @@ app.post('/api/bot/controls/movement', async (req, res) => {
       success: false,
       message: error.message || 'Failed to run bot movement'
     });
+  }
+});
+
+// API: Tickets config and deployment
+app.get('/api/tickets/config', (req, res) => {
+  const guildId = parseDiscordId(req.query.guildId);
+  if (!guildId) {
+    return res.status(400).json({ success: false, message: 'guildId query parameter is required' });
+  }
+
+  res.json({
+    success: true,
+    config: getTicketConfig(guildId) || null
+  });
+});
+
+app.post('/api/tickets/config', (req, res) => {
+  const guildId = parseDiscordId(req.body.guildId);
+  const panelChannelId = parseDiscordId(req.body.panelChannelId);
+  const categoryId = parseDiscordId(req.body.categoryId);
+  const supportRoleId = parseDiscordId(req.body.supportRoleId);
+  const logChannelId = parseDiscordId(req.body.logChannelId);
+
+  if (!guildId || !panelChannelId || !categoryId) {
+    return res.status(400).json({
+      success: false,
+      message: 'guildId, panelChannelId, and categoryId are required'
+    });
+  }
+
+  setTicketConfig(guildId, {
+    panelChannelId,
+    categoryId,
+    supportRoleId: supportRoleId || null,
+    logChannelId: logChannelId || null,
+    panelTitle: String(req.body.panelTitle || 'Support Tickets').slice(0, 120),
+    panelDescription: String(req.body.panelDescription || 'Need help? Click **Open Ticket** and our team will assist you.').slice(0, 1500)
+  });
+
+  res.json({ success: true, message: 'Ticket configuration saved', config: getTicketConfig(guildId) });
+});
+
+app.post('/api/tickets/panel', async (req, res) => {
+  const guildId = parseDiscordId(req.body.guildId);
+  if (!guildId) {
+    return res.status(400).json({ success: false, message: 'guildId is required' });
+  }
+
+  if (!client || !client.isReady()) {
+    return res.status(503).json({ success: false, message: 'Bot is not online' });
+  }
+
+  const config = getTicketConfig(guildId);
+  if (!config) {
+    return res.status(404).json({ success: false, message: 'Ticket config not found for guild' });
+  }
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    await sendTicketPanel(guild, config);
+    res.json({ success: true, message: 'Ticket panel deployed' });
+  } catch (error) {
+    console.error('Ticket panel deploy error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to deploy ticket panel' });
   }
 });
 
