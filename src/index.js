@@ -279,6 +279,49 @@ function getTicketPanelPayload(config) {
   return { embeds: [embed], components: [row] };
 }
 
+function getPriorityEmoji(priority) {
+  if (priority === 'urgent') return '🟥';
+  if (priority === 'high') return '🟧';
+  if (priority === 'low') return '🟩';
+  return '🟦';
+}
+
+function normalizeTicketPriority(input) {
+  const value = String(input || 'normal').toLowerCase();
+  if (['low', 'normal', 'high', 'urgent'].includes(value)) return value;
+  return null;
+}
+
+function buildTicketStatusEmbed(ticketMeta) {
+  return new EmbedBuilder()
+    .setColor(LIGHT_BLUE)
+    .setTitle(`Ticket #${ticketMeta.ticketNumber}`)
+    .setDescription('Support will be with you shortly. Use the controls below to manage this ticket.')
+    .addFields(
+      { name: 'Status', value: ticketMeta.status || 'open', inline: true },
+      { name: 'Priority', value: `${getPriorityEmoji(ticketMeta.priority)} ${ticketMeta.priority || 'normal'}`, inline: true },
+      { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true }
+    )
+    .setTimestamp();
+}
+
+function getTicketActionRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_claim')
+      .setLabel('Claim Ticket')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('ticket_close')
+      .setLabel('Close Ticket')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+async function postTicketStatusMessage(channel, ticketMeta) {
+  await channel.send({ embeds: [buildTicketStatusEmbed(ticketMeta)], components: [getTicketActionRow()] });
+}
+
 async function sendTicketPanel(guild, config) {
   const panelChannel = await guild.channels.fetch(config.panelChannelId).catch(() => null);
   if (!panelChannel || !panelChannel.isTextBased() || typeof panelChannel.send !== 'function') {
@@ -365,33 +408,31 @@ async function createTicketForUser(guild, userId) {
     guildId: guild.id,
     openerId: userId,
     ticketNumber,
+    status: 'open',
+    priority: 'normal',
+    claimedBy: null,
+    firstResponseAt: null,
+    closeReason: null,
     createdAt: Date.now()
   };
   saveTicketsState();
 
-  const openEmbed = new EmbedBuilder()
-    .setColor(LIGHT_BLUE)
-    .setTitle(`Ticket #${ticketNumber}`)
-    .setDescription('Support will be with you shortly. Use the button below to close this ticket when resolved.')
-    .setTimestamp();
-
-  const closeRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('ticket_close')
-      .setLabel('Close Ticket')
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await channel.send({ content: `<@${userId}>`, embeds: [openEmbed], components: [closeRow] });
+  await channel.send({ content: `<@${userId}>` });
+  await postTicketStatusMessage(channel, ticketsState.openTickets[channel.id]);
 
   return channel;
 }
 
-async function closeTicketChannel(channel, closedByTag) {
+async function closeTicketChannel(channel, closedByTag, closeReason) {
   const ticketMeta = ticketsState.openTickets[channel.id];
   if (!ticketMeta) {
     throw new Error('This channel is not tracked as an open ticket');
   }
+
+  if (closeReason) {
+    ticketMeta.closeReason = String(closeReason).slice(0, 500);
+  }
+  ticketMeta.status = 'closed';
 
   const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
   const sorted = messages ? [...messages.values()].sort((left, right) => left.createdTimestamp - right.createdTimestamp) : [];
@@ -416,7 +457,10 @@ async function closeTicketChannel(channel, closedByTag) {
         .addFields(
           { name: 'Ticket channel', value: `${channel.name} (${channel.id})` },
           { name: 'Opened by', value: `<@${ticketMeta.openerId}> (${ticketMeta.openerId})` },
-          { name: 'Closed by', value: closedByTag || 'Unknown' }
+          { name: 'Closed by', value: closedByTag || 'Unknown' },
+          { name: 'Priority', value: ticketMeta.priority || 'normal', inline: true },
+          { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true },
+          { name: 'Reason', value: ticketMeta.closeReason || 'No reason provided' }
         )
         .setTimestamp();
 
@@ -507,7 +551,10 @@ function setupBotHandlers() {
           { name: 'j$ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]', value: 'Configure ticket system for this guild.' },
           { name: 'j$ticket panel', value: 'Post the ticket creation panel in the configured panel channel.' },
           { name: 'j$ticket create', value: 'Create a ticket for yourself.' },
-          { name: 'j$ticket close', value: 'Close the current ticket channel.' },
+          { name: 'j$ticket close [reason]', value: 'Close the current ticket channel with an optional reason.' },
+          { name: 'j$ticket claim', value: 'Claim this ticket as staff.' },
+          { name: 'j$ticket unclaim', value: 'Remove current ticket claim.' },
+          { name: 'j$ticket priority <low|normal|high|urgent>', value: 'Set ticket priority level.' },
           { name: 'j$ticket add <userId|@mention>', value: 'Grant access to a user in this ticket.' },
           { name: 'j$ticket remove <userId|@mention>', value: 'Remove access from a user in this ticket.' },
           { name: 'j$ticket transcript', value: 'Generate a transcript preview of recent messages.' }
@@ -586,10 +633,53 @@ function setupBotHandlers() {
       }
 
       try {
-        await closeTicketChannel(message.channel, message.author.tag);
+        const reason = args.slice(1).join(' ').trim();
+        await closeTicketChannel(message.channel, message.author.tag, reason || null);
       } catch (error) {
         await message.reply(`❌ ${error.message || 'Failed to close ticket.'}`);
       }
+      return;
+    }
+
+    if (subcommand === 'claim' || subcommand === 'unclaim') {
+      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      if (!ticketMeta) {
+        await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      if (subcommand === 'claim') {
+        ticketMeta.claimedBy = message.author.id;
+        ticketMeta.firstResponseAt = ticketMeta.firstResponseAt || Date.now();
+        saveTicketsState();
+        await message.reply(`✅ Ticket claimed by ${message.author}.`);
+      } else {
+        ticketMeta.claimedBy = null;
+        saveTicketsState();
+        await message.reply('✅ Ticket is now unclaimed.');
+      }
+
+      await postTicketStatusMessage(message.channel, ticketMeta);
+      return;
+    }
+
+    if (subcommand === 'priority') {
+      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      if (!ticketMeta) {
+        await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      const priority = normalizeTicketPriority(args[1]);
+      if (!priority) {
+        await message.reply('Usage: `j$ticket priority <low|normal|high|urgent>`');
+        return;
+      }
+
+      ticketMeta.priority = priority;
+      saveTicketsState();
+      await message.reply(`✅ Ticket priority set to **${priority}**.`);
+      await postTicketStatusMessage(message.channel, ticketMeta);
       return;
     }
 
@@ -651,6 +741,31 @@ function setupBotHandlers() {
 
 client.on('interactionCreate', async (interaction) => {
   try {
+    if (interaction.isButton() && interaction.customId === 'ticket_claim') {
+      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      if (!ticketMeta) {
+        await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
+        return;
+      }
+
+      const canManage =
+        interaction.user.id === ticketMeta.openerId ||
+        hasAllowedRole(interaction.member, interaction.user.id);
+
+      if (!canManage) {
+        await interaction.reply({ content: 'You do not have permission to claim this ticket.', ephemeral: true });
+        return;
+      }
+
+      ticketMeta.claimedBy = interaction.user.id;
+      ticketMeta.firstResponseAt = ticketMeta.firstResponseAt || Date.now();
+      saveTicketsState();
+
+      await interaction.reply({ content: `✅ Ticket claimed by <@${interaction.user.id}>.`, ephemeral: true });
+      await postTicketStatusMessage(interaction.channel, ticketMeta);
+      return;
+    }
+
     if (interaction.isButton() && interaction.customId === 'ticket_open') {
       const config = getTicketConfig(interaction.guildId);
       if (!config) {
@@ -691,8 +806,41 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
+      const modal = new ModalBuilder()
+        .setCustomId('ticket_close_reason_modal')
+        .setTitle('Close Ticket');
+
+      const reasonInput = new TextInputBuilder()
+        .setCustomId('ticket_close_reason')
+        .setLabel('Close reason (optional)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setPlaceholder('Resolved / Duplicate / Handled in DM...');
+
+      modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+      await interaction.showModal(modal);
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === 'ticket_close_reason_modal') {
+      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      if (!ticketMeta) {
+        await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
+        return;
+      }
+
+      const canClose =
+        interaction.user.id === ticketMeta.openerId ||
+        hasAllowedRole(interaction.member, interaction.user.id);
+
+      if (!canClose) {
+        await interaction.reply({ content: 'You do not have permission to close this ticket.', ephemeral: true });
+        return;
+      }
+
+      const closeReason = interaction.fields.getTextInputValue('ticket_close_reason');
       await interaction.reply({ content: 'Closing ticket...', ephemeral: true });
-      await closeTicketChannel(interaction.channel, interaction.user.tag);
+      await closeTicketChannel(interaction.channel, interaction.user.tag, closeReason || null);
       return;
     }
 
