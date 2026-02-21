@@ -7,8 +7,8 @@ const DEFAULT_FORM = {
   categoryId: '',
   supportRoleId: '',
   logChannelId: '',
-  panelTitle: 'Support Tickets',
-  panelDescription: 'Need help? Click Open Ticket and our team will assist you.'
+  panelTitle: 'Crystal Stock Tickets',
+  panelDescription: 'Need help? Click Open Ticket and Crystal Stock Support will assist you.'
 };
 const TICKETS_LAST_GUILD_KEY = 'tickets:lastGuildId';
 const TICKETS_LAST_FORM_KEY = 'tickets:lastForm';
@@ -158,7 +158,7 @@ function Tickets() {
             Advanced Ticket System
           </h1>
           <p style={{ opacity: 0.7 }}>
-            Configure secure trade tickets from the site and manage with `j$` commands.
+            Configure secure trade tickets from the site and manage with `c$` commands.
           </p>
         </div>
 
@@ -193,19 +193,19 @@ function Tickets() {
           </form>
 
           <div className="card">
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Discord Commands (`j$`)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Discord Commands (`c$`)</h2>
             <div style={{ display: 'grid', gap: '0.6rem' }}>
-              <div>`j$ticket help`</div>
-              <div>`j$ticket setup &lt;panelChannelId&gt; &lt;categoryId&gt; [supportRoleId] [logChannelId]`</div>
-              <div>`j$ticket panel`</div>
-              <div>`j$ticket create`</div>
-              <div>`j$ticket close`</div>
-              <div>`j$ticket claim`</div>
-              <div>`j$ticket status &lt;text&gt;`</div>
-              <div>`j$ticket done`</div>
-              <div>`j$ticket add &lt;userId|@mention&gt;`</div>
-              <div>`j$ticket remove &lt;userId|@mention&gt;`</div>
-              <div>`j$ticket transcript`</div>
+              <div>`c$ticket help`</div>
+              <div>`c$ticket setup &lt;panelChannelId&gt; &lt;categoryId&gt; [supportRoleId] [logChannelId]`</div>
+              <div>`c$ticket panel`</div>
+              <div>`c$ticket create`</div>
+              <div>`c$ticket close`</div>
+              <div>`c$ticket claim`</div>
+              <div>`c$ticket status &lt;text&gt;`</div>
+              <div>`c$ticket done`</div>
+              <div>`c$ticket add &lt;userId|@mention&gt;`</div>
+              <div>`c$ticket remove &lt;userId|@mention&gt;`</div>
+              <div>`c$ticket transcript`</div>
             </div>
             <p style={{ marginTop: '1rem', opacity: 0.7, lineHeight: '1.6' }}>
               Features include support-only claim/close controls, required trade details on ticket open, partner confirmation flow, status tracking, close transcripts, and website ticket logs.

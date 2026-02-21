@@ -18,7 +18,7 @@ const {
 } = require('discord.js');
 
 const LIGHT_BLUE = 0x87cefa;
-const PREFIX = 'j$';
+const PREFIX = 'c$';
 const OWNER_ID = '1435310225010987088';
 const DEFAULT_MOVEMENT_LOG_CHANNEL_ID = '1473485037876809915';
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -454,10 +454,10 @@ function getNextTicketNumber(guildId) {
 function getTicketPanelPayload(config) {
   const embed = new EmbedBuilder()
     .setColor(LIGHT_BLUE)
-    .setTitle(config.panelTitle || 'Support Tickets')
+    .setTitle(config.panelTitle || 'Crystal Stock Tickets')
     .setDescription(
       config.panelDescription ||
-      'Need help? Click **Open Ticket** and our team will assist you.'
+      'Need help? Click **Open Ticket** and Crystal Stock Support will assist you.'
     )
     .setTimestamp();
 
@@ -491,7 +491,7 @@ function buildTicketStatusEmbed(ticketMeta) {
   return new EmbedBuilder()
     .setColor(LIGHT_BLUE)
     .setTitle(`Ticket #${ticketMeta.ticketNumber}`)
-    .setDescription('Support will be with you shortly. Use the controls below to manage this ticket.')
+    .setDescription('Crystal Stock Support will be with you shortly. Use the controls below to manage this ticket.')
     .addFields(
       { name: 'Status', value: formatTicketText(ticketMeta.status, 'Open'), inline: true },
       { name: 'Priority', value: formatTicketText(ticketMeta.priority, 'Normal'), inline: true },
@@ -779,10 +779,10 @@ function setupBotHandlers() {
       .setTitle('Available Commands')
       .setDescription('Here are the commands you can use:')
       .addFields(
-        { name: 'j$demo', value: 'Demote users by removing their highest role and giving them the role one level down.' },
-        { name: 'j$promo', value: 'Promote users by removing their highest role and giving them the role one level up.' },
-        { name: 'j$ticket help', value: 'Show ticket commands and usage.' },
-        { name: 'j$help', value: 'Shows this help message with all available commands.' }
+        { name: `${PREFIX}demo`, value: 'Demote users by removing their highest role and giving them the role one level down.' },
+        { name: `${PREFIX}promo`, value: 'Promote users by removing their highest role and giving them the role one level up.' },
+        { name: `${PREFIX}ticket help`, value: 'Show ticket commands and usage.' },
+        { name: `${PREFIX}help`, value: 'Shows this help message with all available commands.' }
       )
       .setTimestamp();
     
@@ -797,21 +797,21 @@ function setupBotHandlers() {
     if (subcommand === 'help') {
       const ticketHelp = new EmbedBuilder()
         .setColor(LIGHT_BLUE)
-        .setTitle('Ticket Commands')
-        .setDescription('Prefix: j$')
+        .setTitle('Crystal Stock Ticket Commands')
+        .setDescription(`Prefix: ${PREFIX}`)
         .addFields(
-          { name: 'j$ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]', value: 'Configure ticket system for this guild.' },
-          { name: 'j$ticket panel', value: 'Post the ticket creation panel in the configured panel channel.' },
-          { name: 'j$ticket create', value: 'Create a ticket for yourself.' },
-          { name: 'j$ticket close [reason]', value: 'Close the current ticket channel with an optional reason.' },
-          { name: 'j$ticket claim', value: 'Claim this ticket as staff.' },
-          { name: 'j$ticket unclaim', value: 'Remove current ticket claim.' },
-          { name: 'j$ticket priority <low|normal|high|urgent>', value: 'Set ticket priority level.' },
-          { name: 'j$ticket status <text>', value: 'Update trade status text (Support only).' },
-          { name: 'j$ticket done', value: 'Mark ticket trade status as Done (Support only).' },
-          { name: 'j$ticket add <userId|@mention>', value: 'Grant access to a user in this ticket.' },
-          { name: 'j$ticket remove <userId|@mention>', value: 'Remove access from a user in this ticket.' },
-          { name: 'j$ticket transcript', value: 'Generate a transcript preview of recent messages.' }
+          { name: `${PREFIX}ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]`, value: 'Configure ticket system for this guild.' },
+          { name: `${PREFIX}ticket panel`, value: 'Post the ticket creation panel in the configured panel channel.' },
+          { name: `${PREFIX}ticket create`, value: 'Create a ticket for yourself.' },
+          { name: `${PREFIX}ticket close [reason]`, value: 'Close the current ticket channel with an optional reason.' },
+          { name: `${PREFIX}ticket claim`, value: 'Claim this ticket as staff.' },
+          { name: `${PREFIX}ticket unclaim`, value: 'Remove current ticket claim.' },
+          { name: `${PREFIX}ticket priority <low|normal|high|urgent>`, value: 'Set ticket priority level.' },
+          { name: `${PREFIX}ticket status <text>`, value: 'Update trade status text (Support only).' },
+          { name: `${PREFIX}ticket done`, value: 'Mark ticket trade status as Done (Support only).' },
+          { name: `${PREFIX}ticket add <userId|@mention>`, value: 'Grant access to a user in this ticket.' },
+          { name: `${PREFIX}ticket remove <userId|@mention>`, value: 'Remove access from a user in this ticket.' },
+          { name: `${PREFIX}ticket transcript`, value: 'Generate a transcript preview of recent messages.' }
         )
         .setTimestamp();
 
@@ -822,14 +822,14 @@ function setupBotHandlers() {
     if (subcommand === 'create') {
       const config = getTicketConfig(message.guild.id);
       if (!config) {
-        await message.reply('Ticket system is not configured yet. Ask staff to run `j$ticket setup ...` first.');
+        await message.reply(`Ticket system is not configured yet. Ask staff to run \`${PREFIX}ticket setup ...\` first.`);
         return;
       }
 
       const tradeTargetRaw = args[1];
       const tradeDetails = args.slice(2).join(' ').trim();
       if (!tradeTargetRaw || !tradeDetails) {
-        await message.reply('Usage: `j$ticket create <usernameOrUserId> <whatYouAreTrading>`');
+        await message.reply(`Usage: \`${PREFIX}ticket create <usernameOrUserId> <whatYouAreTrading>\``);
         return;
       }
 
@@ -863,7 +863,7 @@ function setupBotHandlers() {
             EmbedLinks: true
           });
         } else {
-          await ticketChannel.send('I could not confidently match that user from this server. Support can add them with `j$ticket add <userId>` once verified.');
+          await ticketChannel.send(`I could not confidently match that user from this server. Support can add them with \`${PREFIX}ticket add <userId>\` once verified.`);
         }
 
         await message.reply(`✅ Ticket created: ${ticketChannel}`);
@@ -893,7 +893,7 @@ function setupBotHandlers() {
       const logChannelId = parseDiscordId(args[4]);
 
       if (!panelChannelId || !categoryId) {
-        await message.reply('Usage: `j$ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]`');
+        await message.reply(`Usage: \`${PREFIX}ticket setup <panelChannelId> <categoryId> [supportRoleId] [logChannelId]\``);
         return;
       }
 
@@ -902,18 +902,18 @@ function setupBotHandlers() {
         categoryId,
         supportRoleId: supportRoleId || null,
         logChannelId: logChannelId || null,
-        panelTitle: 'Support Tickets',
-        panelDescription: 'Need help? Click **Open Ticket** and our team will assist you.'
+        panelTitle: 'Crystal Stock Tickets',
+        panelDescription: 'Need help? Click **Open Ticket** and Crystal Stock Support will assist you.'
       });
 
-      await message.reply('✅ Ticket configuration saved. Use `j$ticket panel` to deploy the panel.');
+      await message.reply(`✅ Ticket configuration saved. Use \`${PREFIX}ticket panel\` to deploy the panel.`);
       return;
     }
 
     if (subcommand === 'panel') {
       const config = getTicketConfig(message.guild.id);
       if (!config) {
-        await message.reply('Ticket system is not configured yet. Run `j$ticket setup ...` first.');
+        await message.reply(`Ticket system is not configured yet. Run \`${PREFIX}ticket setup ...\` first.`);
         return;
       }
 
@@ -999,7 +999,7 @@ function setupBotHandlers() {
 
       const priority = normalizeTicketPriority(args[1]);
       if (!priority) {
-        await message.reply('Usage: `j$ticket priority <low|normal|high|urgent>`');
+        await message.reply(`Usage: \`${PREFIX}ticket priority <low|normal|high|urgent>\``);
         return;
       }
 
@@ -1024,7 +1024,7 @@ function setupBotHandlers() {
 
       const nextStatus = subcommand === 'done' ? 'Done' : args.slice(1).join(' ').trim();
       if (!nextStatus) {
-        await message.reply('Usage: `j$ticket status <text>`');
+        await message.reply(`Usage: \`${PREFIX}ticket status <text>\``);
         return;
       }
 
@@ -1038,7 +1038,7 @@ function setupBotHandlers() {
     if (subcommand === 'add' || subcommand === 'remove') {
       const userId = parseDiscordId(args[1]);
       if (!userId) {
-        await message.reply(`Usage: \`j$ticket ${subcommand} <userId|@mention>\``);
+        await message.reply(`Usage: \`${PREFIX}ticket ${subcommand} <userId|@mention>\``);
         return;
       }
 
@@ -1091,7 +1091,7 @@ function setupBotHandlers() {
       return;
     }
 
-    await message.reply('Unknown ticket command. Use `j$ticket help`.');
+    await message.reply(`Unknown ticket command. Use \`${PREFIX}ticket help\`.`);
     return;
   }
 });
@@ -1208,7 +1208,7 @@ client.on('interactionCreate', async (interaction) => {
           EmbedLinks: true
         });
       } else {
-        await channel.send('I could not confidently match that user from this server. Support can add them with `j$ticket add <userId>` once verified.');
+        await channel.send(`I could not confidently match that user from this server. Support can add them with \`${PREFIX}ticket add <userId>\` once verified.`);
       }
 
       await interaction.reply({
@@ -1494,7 +1494,7 @@ client.on('interactionCreate', async (interaction) => {
       if (Date.now() - session.createdAt > SESSION_TTL_MS) {
         sessions.delete(interaction.user.id);
         await interaction.reply({
-          content: 'Your saved ids expired. Run j$demo again for a new wave.',
+          content: `Your saved ids expired. Run ${PREFIX}demo again for a new wave.`,
           ephemeral: true
         });
         return;
@@ -1619,7 +1619,7 @@ client.on('interactionCreate', async (interaction) => {
       if (Date.now() - session.createdAt > SESSION_TTL_MS) {
         sessions.delete(interaction.user.id);
         await interaction.reply({
-          content: 'Your saved ids expired. Run j$promo again for a new wave.',
+          content: `Your saved ids expired. Run ${PREFIX}promo again for a new wave.`,
           ephemeral: true
         });
         return;
@@ -1866,7 +1866,7 @@ app.use(express.static(path.join(__dirname, '..', 'dist')));
 
 // API: Health check
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, service: 'jaces-promo-demo-bot' });
+  res.json({ ok: true, service: 'crystal-stock-tickets-bot' });
 });
 
 // API: Bot status
@@ -2250,8 +2250,8 @@ app.post('/api/tickets/config', (req, res) => {
     categoryId,
     supportRoleId: supportRoleId || null,
     logChannelId: logChannelId || null,
-    panelTitle: String(req.body.panelTitle || 'Support Tickets').slice(0, 120),
-    panelDescription: String(req.body.panelDescription || 'Need help? Click **Open Ticket** and our team will assist you.').slice(0, 1500)
+    panelTitle: String(req.body.panelTitle || 'Crystal Stock Tickets').slice(0, 120),
+    panelDescription: String(req.body.panelDescription || 'Need help? Click **Open Ticket** and Crystal Stock Support will assist you.').slice(0, 1500)
   });
 
   res.json({ success: true, message: 'Ticket configuration saved', config: getTicketConfig(guildId) });
