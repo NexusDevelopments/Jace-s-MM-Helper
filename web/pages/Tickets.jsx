@@ -1,25 +1,73 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
+const DEFAULT_FORM = {
+  guildId: '',
+  panelChannelId: '',
+  categoryId: '',
+  supportRoleId: '',
+  logChannelId: '',
+  panelTitle: 'Support Tickets',
+  panelDescription: 'Need help? Click Open Ticket and our team will assist you.'
+};
+
 function Tickets() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [form, setForm] = useState({
-    guildId: '',
-    panelChannelId: '',
-    categoryId: '',
-    supportRoleId: '',
-    logChannelId: '',
-    panelTitle: 'Support Tickets',
-    panelDescription: 'Need help? Click Open Ticket and our team will assist you.'
-  });
+  const [form, setForm] = useState(DEFAULT_FORM);
+
+  const applyServerConfig = (guildId, config) => {
+    if (!config) return;
+    setForm((prev) => ({
+      ...prev,
+      guildId,
+      panelChannelId: config.panelChannelId || '',
+      categoryId: config.categoryId || '',
+      supportRoleId: config.supportRoleId || '',
+      logChannelId: config.logChannelId || '',
+      panelTitle: config.panelTitle || DEFAULT_FORM.panelTitle,
+      panelDescription: config.panelDescription || DEFAULT_FORM.panelDescription
+    }));
+  };
+
+  const loadConfigForGuild = async (guildId) => {
+    const normalizedGuildId = String(guildId || '').trim();
+    if (!/^\d{17,20}$/.test(normalizedGuildId)) return;
+
+    try {
+      const response = await fetch(`/api/tickets/config?guildId=${encodeURIComponent(normalizedGuildId)}`);
+      const data = await response.json();
+      if (!response.ok || !data.success) return;
+      applyServerConfig(normalizedGuildId, data.config);
+    } catch {
+      // ignore auto-load failures to avoid interrupting setup flow
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
+      const lastGuildId = localStorage.getItem('tickets:lastGuildId') || '';
+      if (lastGuildId) {
+        setForm((prev) => ({ ...prev, guildId: lastGuildId }));
+        await loadConfigForGuild(lastGuildId);
+      }
       setLoading(false);
     };
     init();
   }, []);
+
+  useEffect(() => {
+    const guildId = String(form.guildId || '').trim();
+    if (guildId) {
+      localStorage.setItem('tickets:lastGuildId', guildId);
+    }
+
+    const timer = setTimeout(() => {
+      loadConfigForGuild(guildId);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [form.guildId]);
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -41,6 +89,7 @@ function Tickets() {
         throw new Error(data.message || 'Failed to save ticket config');
       }
 
+      applyServerConfig(String(form.guildId || '').trim(), data.config || null);
       showMessage('success', 'Ticket configuration saved successfully.');
     } catch (error) {
       showMessage('error', error.message);
