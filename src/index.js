@@ -367,17 +367,20 @@ function getTicketPanelPayload(config) {
   return { embeds: [embed], components: [row] };
 }
 
-function getPriorityEmoji(priority) {
-  if (priority === 'urgent') return '🟥';
-  if (priority === 'high') return '🟧';
-  if (priority === 'low') return '🟩';
-  return '🟦';
-}
-
 function normalizeTicketPriority(input) {
   const value = String(input || 'normal').toLowerCase();
   if (['low', 'normal', 'high', 'urgent'].includes(value)) return value;
   return null;
+}
+
+function formatTicketText(value, fallback) {
+  const raw = String(value || fallback || '').trim();
+  if (!raw) return 'N/A';
+  return raw
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function buildTicketStatusEmbed(ticketMeta) {
@@ -386,8 +389,8 @@ function buildTicketStatusEmbed(ticketMeta) {
     .setTitle(`Ticket #${ticketMeta.ticketNumber}`)
     .setDescription('Support will be with you shortly. Use the controls below to manage this ticket.')
     .addFields(
-      { name: 'Status', value: ticketMeta.status || 'open', inline: true },
-      { name: 'Priority', value: `${getPriorityEmoji(ticketMeta.priority)} ${ticketMeta.priority || 'normal'}`, inline: true },
+      { name: 'Status', value: formatTicketText(ticketMeta.status, 'Open'), inline: true },
+      { name: 'Priority', value: formatTicketText(ticketMeta.priority, 'Normal'), inline: true },
       { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true },
       { name: 'Trading With', value: ticketMeta.tradePartnerId ? `<@${ticketMeta.tradePartnerId}>` : (ticketMeta.tradeTargetRaw || 'Pending confirmation'), inline: false },
       { name: 'Trade Offer', value: ticketMeta.tradeDetails || 'Not provided', inline: false }
@@ -502,7 +505,7 @@ async function createTicketForUser(guild, userId, options = {}) {
     guildId: guild.id,
     openerId: userId,
     ticketNumber,
-    status: 'open',
+    status: 'Open',
     priority: 'normal',
     claimedBy: null,
     firstResponseAt: null,
@@ -523,7 +526,7 @@ async function createTicketForUser(guild, userId, options = {}) {
     ticketNumber,
     openerId: userId,
     channelId: channel.id,
-    status: 'open',
+    status: 'Open',
     tradeDetails: ticketsState.openTickets[channel.id].tradeDetails,
     tradeTargetRaw: ticketsState.openTickets[channel.id].tradeTargetRaw
   });
@@ -540,7 +543,7 @@ async function closeTicketChannel(channel, closedByTag, closeReason) {
   if (closeReason) {
     ticketMeta.closeReason = String(closeReason).slice(0, 500);
   }
-  ticketMeta.status = 'closed';
+  ticketMeta.status = 'Closed';
 
   appendTicketLog(ticketMeta.guildId, {
     type: 'closed',
@@ -580,7 +583,7 @@ async function closeTicketChannel(channel, closedByTag, closeReason) {
           { name: 'Ticket channel', value: `${channel.name} (${channel.id})` },
           { name: 'Opened by', value: `<@${ticketMeta.openerId}> (${ticketMeta.openerId})` },
           { name: 'Closed by', value: closedByTag || 'Unknown' },
-          { name: 'Priority', value: ticketMeta.priority || 'normal', inline: true },
+          { name: 'Priority', value: formatTicketText(ticketMeta.priority, 'Normal'), inline: true },
           { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true },
           { name: 'Reason', value: ticketMeta.closeReason || 'No reason provided' }
         )
@@ -837,7 +840,7 @@ function setupBotHandlers() {
 
         ticketMeta.claimedBy = message.author.id;
         ticketMeta.firstResponseAt = ticketMeta.firstResponseAt || Date.now();
-        ticketMeta.status = 'claimed';
+        ticketMeta.status = 'Claimed';
         saveTicketsState();
         await message.reply(`✅ Ticket claimed by ${message.author}.`);
       } else {
@@ -846,7 +849,7 @@ function setupBotHandlers() {
           return;
         }
         ticketMeta.claimedBy = null;
-        ticketMeta.status = 'open';
+        ticketMeta.status = 'Open';
         saveTicketsState();
         await message.reply('✅ Ticket is now unclaimed.');
       }
@@ -875,7 +878,7 @@ function setupBotHandlers() {
 
       ticketMeta.priority = priority;
       saveTicketsState();
-      await message.reply(`✅ Ticket priority set to **${priority}**.`);
+      await message.reply(`✅ Ticket priority set to **${formatTicketText(priority, 'Normal')}**.`);
       await postTicketStatusMessage(message.channel, ticketMeta);
       return;
     }
@@ -989,7 +992,7 @@ client.on('interactionCreate', async (interaction) => {
 
       ticketMeta.claimedBy = interaction.user.id;
       ticketMeta.firstResponseAt = ticketMeta.firstResponseAt || Date.now();
-      ticketMeta.status = 'claimed';
+      ticketMeta.status = 'Claimed';
       saveTicketsState();
 
       await interaction.reply({ content: `✅ Ticket claimed by <@${interaction.user.id}>.`, ephemeral: true });
@@ -1115,7 +1118,7 @@ client.on('interactionCreate', async (interaction) => {
 
       ticketMeta.tradePartnerId = targetUserId;
       ticketMeta.pendingTradePartnerId = null;
-      ticketMeta.status = 'user-confirmed';
+      ticketMeta.status = 'User Confirmed';
       saveTicketsState();
 
       await interaction.reply({ content: `✅ Added <@${targetUserId}> to the ticket.`, ephemeral: true });
