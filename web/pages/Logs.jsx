@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 function Logs() {
   const [loading, setLoading] = useState(true);
@@ -88,6 +89,17 @@ function Logs() {
                     {log.tradeDetails ? <div>Trade: {log.tradeDetails}</div> : null}
                     <div>Created: {log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Unknown'}</div>
                   </div>
+                  {log.ticketNumber ? (
+                    <div style={{ marginTop: '0.7rem' }}>
+                      <Link
+                        to={`/id?id=${encodeURIComponent(String(log.ticketNumber))}&guildId=${encodeURIComponent(guildId.trim())}`}
+                        className="btn"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        Transcript
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               ))
             )}

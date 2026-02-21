@@ -7,6 +7,7 @@ import SourceCode from './pages/SourceCode';
 import Tickets from './pages/Tickets';
 import BotControls from './pages/BotControls';
 import Logs from './pages/Logs';
+import TicketTranscript from './pages/TicketTranscript';
 import logo from './assets/securify-logo.svg';
 
 function App() {
@@ -40,6 +41,7 @@ function App() {
             <Route path="/source" element={<SourceCode />} />
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/logs" element={<Logs />} />
+            <Route path="/id" element={<TicketTranscript />} />
             <Route path="/botcontrols" element={<BotControls />} />
           </Routes>
         </div>

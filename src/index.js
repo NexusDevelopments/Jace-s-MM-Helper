@@ -41,7 +41,8 @@ let ticketsState = {
   configs: {},
   counters: {},
   openTickets: {},
-  logs: {}
+  logs: {},
+  transcripts: {}
 };
 
 function loadTicketsState() {
@@ -54,7 +55,8 @@ function loadTicketsState() {
       configs: parsed.configs || {},
       counters: parsed.counters || {},
       openTickets: parsed.openTickets || {},
-      logs: parsed.logs || {}
+      logs: parsed.logs || {},
+      transcripts: parsed.transcripts || {}
     };
   } catch (error) {
     console.error('Failed to load tickets state:', error);
@@ -273,6 +275,40 @@ function appendTicketLog(guildId, entry) {
   });
   ticketsState.logs[guildId] = ticketsState.logs[guildId].slice(0, 300);
   saveTicketsState();
+}
+
+function setTicketTranscript(guildId, ticketNumber, transcriptData) {
+  if (!ticketsState.transcripts[guildId]) ticketsState.transcripts[guildId] = {};
+  ticketsState.transcripts[guildId][String(ticketNumber)] = transcriptData;
+  saveTicketsState();
+}
+
+function getTicketTranscript(guildId, ticketNumber) {
+  return ticketsState.transcripts[guildId]?.[String(ticketNumber)] || null;
+}
+
+function buildTranscriptText(transcript) {
+  if (!transcript || !Array.isArray(transcript.entries)) return 'No transcript data.';
+
+  const headerLines = [
+    `Ticket #${transcript.ticketNumber}`,
+    `Guild ID: ${transcript.guildId}`,
+    `Channel: ${transcript.channelName} (${transcript.channelId})`,
+    `Opened By: ${transcript.openerId}`,
+    `Closed By: ${transcript.closedBy || 'Unknown'}`,
+    `Closed At: ${transcript.closedAt ? new Date(transcript.closedAt).toISOString() : 'Unknown'}`,
+    ''
+  ];
+
+  const messageLines = transcript.entries.map((entry) => {
+    const content = (entry.content || '').trim() || '[empty]';
+    const attachmentLine = entry.attachments && entry.attachments.length
+      ? ` | attachments: ${entry.attachments.join(', ')}`
+      : '';
+    return `[${new Date(entry.timestamp).toISOString()}] ${entry.authorTag} (${entry.authorId}): ${content}${attachmentLine}`;
+  });
+
+  return [...headerLines, ...messageLines].join('\n');
 }
 
 function normalizeForMatch(input) {
@@ -561,9 +597,36 @@ async function closeTicketChannel(channel, closedByTag, closeReason) {
 
   const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
   const sorted = messages ? [...messages.values()].sort((left, right) => left.createdTimestamp - right.createdTimestamp) : [];
-  const transcriptLines = sorted.map((message) => {
+  const transcriptEntries = sorted.map((message) => {
     const content = (message.content || '[non-text message]').replace(/\s+/g, ' ').trim();
-    return `[${new Date(message.createdTimestamp).toISOString()}] ${message.author.tag}: ${content || '[empty]'}`;
+    return {
+      messageId: message.id,
+      authorId: message.author.id,
+      authorTag: message.author.tag,
+      avatarUrl: message.author.displayAvatarURL({ extension: 'png', size: 128 }),
+      content: content || '[empty]',
+      attachments: [...message.attachments.values()].map((attachment) => attachment.url),
+      timestamp: message.createdTimestamp
+    };
+  });
+
+  const transcriptData = {
+    guildId: ticketMeta.guildId,
+    channelId: channel.id,
+    channelName: channel.name,
+    ticketNumber: ticketMeta.ticketNumber,
+    openerId: ticketMeta.openerId,
+    closedBy: closedByTag || 'Unknown',
+    closeReason: ticketMeta.closeReason || 'No reason provided',
+    closedAt: Date.now(),
+    entries: transcriptEntries
+  };
+
+  setTicketTranscript(ticketMeta.guildId, ticketMeta.ticketNumber, transcriptData);
+
+  const transcriptLines = transcriptEntries.map((entry) => {
+    const attachmentLine = entry.attachments.length ? ` [attachments: ${entry.attachments.join(', ')}]` : '';
+    return `[${new Date(entry.timestamp).toISOString()}] ${entry.authorTag}: ${entry.content}${attachmentLine}`;
   });
 
   const transcriptAttachment = new AttachmentBuilder(Buffer.from(transcriptLines.join('\n') || 'No messages.', 'utf8'), {
@@ -2109,6 +2172,41 @@ app.get('/api/tickets/logs', (req, res) => {
     success: true,
     logs: getTicketLogs(guildId)
   });
+});
+
+app.get('/api/tickets/transcript', (req, res) => {
+  const guildId = parseDiscordId(req.query.guildId);
+  const ticketId = Number.parseInt(String(req.query.id || ''), 10);
+
+  if (!guildId || Number.isNaN(ticketId) || ticketId <= 0) {
+    return res.status(400).json({ success: false, message: 'guildId and numeric id are required' });
+  }
+
+  const transcript = getTicketTranscript(guildId, ticketId);
+  if (!transcript) {
+    return res.status(404).json({ success: false, message: 'Transcript not found for that ticket' });
+  }
+
+  res.json({ success: true, transcript });
+});
+
+app.get('/api/tickets/transcript/download', (req, res) => {
+  const guildId = parseDiscordId(req.query.guildId);
+  const ticketId = Number.parseInt(String(req.query.id || ''), 10);
+
+  if (!guildId || Number.isNaN(ticketId) || ticketId <= 0) {
+    return res.status(400).json({ success: false, message: 'guildId and numeric id are required' });
+  }
+
+  const transcript = getTicketTranscript(guildId, ticketId);
+  if (!transcript) {
+    return res.status(404).json({ success: false, message: 'Transcript not found for that ticket' });
+  }
+
+  const text = buildTranscriptText(transcript);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}-transcript.txt"`);
+  res.send(text);
 });
 
 app.post('/api/tickets/panel', async (req, res) => {
