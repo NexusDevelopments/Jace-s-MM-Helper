@@ -26,7 +26,7 @@ function App() {
             <NavLink to="/invite" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Invite Bot</NavLink>
             <NavLink to="/botcontrols" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Bot Controls</NavLink>
             <NavLink to="/tickets" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Tickets</NavLink>
-            <NavLink to="/logs" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Logs</NavLink>
+            <NavLink to="/logs" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Ticket Logs</NavLink>
             <NavLink to="/source" className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}>Source Code</NavLink>
           </nav>
         </aside>

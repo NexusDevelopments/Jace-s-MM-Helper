@@ -89,7 +89,7 @@ function Tickets() {
             Advanced Ticket System
           </h1>
           <p style={{ opacity: 0.7 }}>
-            Configure tickets from the site and manage with `j$` commands.
+            Configure secure trade tickets from the site and manage with `j$` commands.
           </p>
         </div>
 
@@ -119,6 +119,7 @@ function Tickets() {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button className="btn btn-primary" type="submit">Save Config</button>
               <button className="btn" type="button" onClick={deployPanel}>Deploy Panel</button>
+              <Link to="/logs" className="btn" style={{ textDecoration: 'none' }}>Ticket Logs</Link>
             </div>
           </form>
 
@@ -130,12 +131,15 @@ function Tickets() {
               <div>`j$ticket panel`</div>
               <div>`j$ticket create`</div>
               <div>`j$ticket close`</div>
+              <div>`j$ticket claim`</div>
+              <div>`j$ticket status &lt;text&gt;`</div>
+              <div>`j$ticket done`</div>
               <div>`j$ticket add &lt;userId|@mention&gt;`</div>
               <div>`j$ticket remove &lt;userId|@mention&gt;`</div>
               <div>`j$ticket transcript`</div>
             </div>
             <p style={{ marginTop: '1rem', opacity: 0.7, lineHeight: '1.6' }}>
-              Features include button-based ticket opening, auto ticket channels, role-based visibility, close transcripts, and log channel reporting.
+              Features include support-only claim/close controls, required trade details on ticket open, partner confirmation flow, status tracking, close transcripts, and website ticket logs.
             </p>
           </div>
         </div>

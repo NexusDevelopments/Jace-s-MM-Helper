@@ -40,7 +40,8 @@ let sessionCleanupInterval = null;
 let ticketsState = {
   configs: {},
   counters: {},
-  openTickets: {}
+  openTickets: {},
+  logs: {}
 };
 
 function loadTicketsState() {
@@ -52,7 +53,8 @@ function loadTicketsState() {
     ticketsState = {
       configs: parsed.configs || {},
       counters: parsed.counters || {},
-      openTickets: parsed.openTickets || {}
+      openTickets: parsed.openTickets || {},
+      logs: parsed.logs || {}
     };
   } catch (error) {
     console.error('Failed to load tickets state:', error);
@@ -252,6 +254,92 @@ function setTicketConfig(guildId, config) {
   saveTicketsState();
 }
 
+function isSupportStaff(member, guildId, userId) {
+  if (userId === OWNER_ID) return true;
+  const config = getTicketConfig(guildId);
+  if (!config || !config.supportRoleId || !member) return false;
+  return member.roles.cache.has(config.supportRoleId);
+}
+
+function getTicketLogs(guildId) {
+  return ticketsState.logs[guildId] || [];
+}
+
+function appendTicketLog(guildId, entry) {
+  if (!ticketsState.logs[guildId]) ticketsState.logs[guildId] = [];
+  ticketsState.logs[guildId].unshift({
+    ...entry,
+    createdAt: Date.now()
+  });
+  ticketsState.logs[guildId] = ticketsState.logs[guildId].slice(0, 300);
+  saveTicketsState();
+}
+
+function normalizeForMatch(input) {
+  return String(input || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function levenshteinDistance(a, b) {
+  const left = normalizeForMatch(a);
+  const right = normalizeForMatch(b);
+  const matrix = Array.from({ length: left.length + 1 }, () => new Array(right.length + 1).fill(0));
+
+  for (let i = 0; i <= left.length; i += 1) matrix[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) matrix[0][j] = j;
+
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[left.length][right.length];
+}
+
+async function findBestTradeMember(guild, input) {
+  const query = String(input || '').trim();
+  if (!query) return null;
+
+  const maybeId = parseDiscordId(query);
+  if (maybeId) {
+    const byId = await guild.members.fetch(maybeId).catch(() => null);
+    if (byId) return { member: byId, confidence: 'exact-id' };
+  }
+
+  const fetched = await guild.members.fetch({ query: query.slice(0, 32), limit: 20 }).catch(() => null);
+  const candidates = fetched ? [...fetched.values()] : [];
+
+  const normalizedQuery = normalizeForMatch(query);
+  const exact = candidates.find((member) => {
+    const username = normalizeForMatch(member.user.username);
+    const displayName = normalizeForMatch(member.displayName || '');
+    const tag = normalizeForMatch(member.user.tag || '');
+    return username === normalizedQuery || displayName === normalizedQuery || tag === normalizedQuery;
+  });
+
+  if (exact) return { member: exact, confidence: 'exact-name' };
+  if (!candidates.length) return null;
+
+  const best = candidates
+    .map((member) => {
+      const usernameScore = levenshteinDistance(query, member.user.username || '');
+      const displayScore = levenshteinDistance(query, member.displayName || '');
+      const tagScore = levenshteinDistance(query, member.user.tag || '');
+      return {
+        member,
+        score: Math.min(usernameScore, displayScore, tagScore)
+      };
+    })
+    .sort((left, right) => left.score - right.score)[0];
+
+  return best ? { member: best.member, confidence: 'closest-match' } : null;
+}
+
 function getNextTicketNumber(guildId) {
   const next = (ticketsState.counters[guildId] || 0) + 1;
   ticketsState.counters[guildId] = next;
@@ -300,7 +388,9 @@ function buildTicketStatusEmbed(ticketMeta) {
     .addFields(
       { name: 'Status', value: ticketMeta.status || 'open', inline: true },
       { name: 'Priority', value: `${getPriorityEmoji(ticketMeta.priority)} ${ticketMeta.priority || 'normal'}`, inline: true },
-      { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true }
+      { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true },
+      { name: 'Trading With', value: ticketMeta.tradePartnerId ? `<@${ticketMeta.tradePartnerId}>` : (ticketMeta.tradeTargetRaw || 'Pending confirmation'), inline: false },
+      { name: 'Trade Offer', value: ticketMeta.tradeDetails || 'Not provided', inline: false }
     )
     .setTimestamp();
 }
@@ -311,6 +401,10 @@ function getTicketActionRow() {
       .setCustomId('ticket_claim')
       .setLabel('Claim Ticket')
       .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('ticket_done')
+      .setLabel('Trade Done')
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('ticket_close')
       .setLabel('Close Ticket')
@@ -376,7 +470,7 @@ function buildTicketPermissionOverwrites(guild, openerId, supportRoleId) {
   return overwrites;
 }
 
-async function createTicketForUser(guild, userId) {
+async function createTicketForUser(guild, userId, options = {}) {
   const config = getTicketConfig(guild.id);
   if (!config) {
     throw new Error('Ticket system is not configured for this server');
@@ -413,12 +507,26 @@ async function createTicketForUser(guild, userId) {
     claimedBy: null,
     firstResponseAt: null,
     closeReason: null,
+    tradeDetails: options.tradeDetails ? String(options.tradeDetails).slice(0, 500) : null,
+    tradeTargetRaw: options.tradeTargetRaw ? String(options.tradeTargetRaw).slice(0, 120) : null,
+    tradePartnerId: options.tradePartnerId || null,
+    pendingTradePartnerId: options.pendingTradePartnerId || null,
     createdAt: Date.now()
   };
   saveTicketsState();
 
   await channel.send({ content: `<@${userId}>` });
   await postTicketStatusMessage(channel, ticketsState.openTickets[channel.id]);
+
+  appendTicketLog(guild.id, {
+    type: 'opened',
+    ticketNumber,
+    openerId: userId,
+    channelId: channel.id,
+    status: 'open',
+    tradeDetails: ticketsState.openTickets[channel.id].tradeDetails,
+    tradeTargetRaw: ticketsState.openTickets[channel.id].tradeTargetRaw
+  });
 
   return channel;
 }
@@ -433,6 +541,20 @@ async function closeTicketChannel(channel, closedByTag, closeReason) {
     ticketMeta.closeReason = String(closeReason).slice(0, 500);
   }
   ticketMeta.status = 'closed';
+
+  appendTicketLog(ticketMeta.guildId, {
+    type: 'closed',
+    ticketNumber: ticketMeta.ticketNumber,
+    openerId: ticketMeta.openerId,
+    channelId: channel.id,
+    closedBy: closedByTag || 'Unknown',
+    closeReason: ticketMeta.closeReason || 'No reason provided',
+    priority: ticketMeta.priority || 'normal',
+    claimedBy: ticketMeta.claimedBy || null,
+    tradeStatus: ticketMeta.status,
+    tradePartnerId: ticketMeta.tradePartnerId || null,
+    tradeDetails: ticketMeta.tradeDetails || null
+  });
 
   const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
   const sorted = messages ? [...messages.values()].sort((left, right) => left.createdTimestamp - right.createdTimestamp) : [];
@@ -555,6 +677,8 @@ function setupBotHandlers() {
           { name: 'j$ticket claim', value: 'Claim this ticket as staff.' },
           { name: 'j$ticket unclaim', value: 'Remove current ticket claim.' },
           { name: 'j$ticket priority <low|normal|high|urgent>', value: 'Set ticket priority level.' },
+          { name: 'j$ticket status <text>', value: 'Update trade status text (Support only).' },
+          { name: 'j$ticket done', value: 'Mark ticket trade status as Done (Support only).' },
           { name: 'j$ticket add <userId|@mention>', value: 'Grant access to a user in this ticket.' },
           { name: 'j$ticket remove <userId|@mention>', value: 'Remove access from a user in this ticket.' },
           { name: 'j$ticket transcript', value: 'Generate a transcript preview of recent messages.' }
@@ -572,8 +696,46 @@ function setupBotHandlers() {
         return;
       }
 
+      const tradeTargetRaw = args[1];
+      const tradeDetails = args.slice(2).join(' ').trim();
+      if (!tradeTargetRaw || !tradeDetails) {
+        await message.reply('Usage: `j$ticket create <usernameOrUserId> <whatYouAreTrading>`');
+        return;
+      }
+
       try {
-        const ticketChannel = await createTicketForUser(message.guild, message.author.id);
+        const match = await findBestTradeMember(message.guild, tradeTargetRaw);
+        const ticketChannel = await createTicketForUser(message.guild, message.author.id, {
+          tradeTargetRaw,
+          tradeDetails,
+          tradePartnerId: match && match.confidence.startsWith('exact') ? match.member.id : null,
+          pendingTradePartnerId: match ? match.member.id : null
+        });
+
+        if (match && !ticketChannel.permissionsFor(match.member.id)?.has(PermissionFlagsBits.ViewChannel)) {
+          const promptRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`ticket_confirm_target:${match.member.id}`)
+              .setLabel('Yes')
+              .setStyle(ButtonStyle.Primary)
+          );
+
+          await ticketChannel.send({
+            content: `<@${message.author.id}> is this the right username? ${match.member} (${match.member.user.tag})`,
+            components: [promptRow]
+          });
+        } else if (match && match.member.id) {
+          await ticketChannel.permissionOverwrites.edit(match.member.id, {
+            ViewChannel: true,
+            SendMessages: true,
+            ReadMessageHistory: true,
+            AttachFiles: true,
+            EmbedLinks: true
+          });
+        } else {
+          await ticketChannel.send('I could not confidently match that user from this server. Support can add them with `j$ticket add <userId>` once verified.');
+        }
+
         await message.reply(`✅ Ticket created: ${ticketChannel}`);
       } catch (error) {
         await message.reply(`❌ ${error.message || 'Failed to create ticket.'}`);
@@ -581,7 +743,15 @@ function setupBotHandlers() {
       return;
     }
 
-    if (!hasAllowedRole(message.member, message.author.id)) {
+    const supportOnlyCommands = new Set(['close', 'claim', 'unclaim', 'priority', 'status', 'done', 'add', 'remove']);
+    const isSupport = isSupportStaff(message.member, message.guild.id, message.author.id);
+
+    if (supportOnlyCommands.has(subcommand)) {
+      if (!isSupport) {
+        await message.reply('❌ Only Support can run this ticket command.');
+        return;
+      }
+    } else if (!hasAllowedRole(message.member, message.author.id)) {
       await message.reply('❌ You do not have permission to manage tickets. Administrator permissions required.');
       return;
     }
@@ -627,8 +797,14 @@ function setupBotHandlers() {
     }
 
     if (subcommand === 'close') {
-      if (!ticketsState.openTickets[message.channel.id]) {
+      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      if (!ticketMeta) {
         await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      if (!isSupportStaff(message.member, message.guild.id, message.author.id)) {
+        await message.reply('❌ Only Support can close tickets.');
         return;
       }
 
@@ -648,13 +824,29 @@ function setupBotHandlers() {
         return;
       }
 
+      if (!isSupportStaff(message.member, message.guild.id, message.author.id)) {
+        await message.reply('❌ Only Support can claim tickets.');
+        return;
+      }
+
       if (subcommand === 'claim') {
+        if (ticketMeta.claimedBy && ticketMeta.claimedBy !== message.author.id) {
+          await message.reply(`❌ This ticket is already claimed by <@${ticketMeta.claimedBy}>.`);
+          return;
+        }
+
         ticketMeta.claimedBy = message.author.id;
         ticketMeta.firstResponseAt = ticketMeta.firstResponseAt || Date.now();
+        ticketMeta.status = 'claimed';
         saveTicketsState();
         await message.reply(`✅ Ticket claimed by ${message.author}.`);
       } else {
+        if (ticketMeta.claimedBy && ticketMeta.claimedBy !== message.author.id && message.author.id !== OWNER_ID) {
+          await message.reply('❌ Only the support member who claimed this ticket can unclaim it.');
+          return;
+        }
         ticketMeta.claimedBy = null;
+        ticketMeta.status = 'open';
         saveTicketsState();
         await message.reply('✅ Ticket is now unclaimed.');
       }
@@ -667,6 +859,11 @@ function setupBotHandlers() {
       const ticketMeta = ticketsState.openTickets[message.channel.id];
       if (!ticketMeta) {
         await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      if (!isSupportStaff(message.member, message.guild.id, message.author.id)) {
+        await message.reply('❌ Only Support can change ticket priority.');
         return;
       }
 
@@ -683,6 +880,31 @@ function setupBotHandlers() {
       return;
     }
 
+    if (subcommand === 'status' || subcommand === 'done') {
+      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      if (!ticketMeta) {
+        await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      if (!isSupportStaff(message.member, message.guild.id, message.author.id)) {
+        await message.reply('❌ Only Support can update ticket trade status.');
+        return;
+      }
+
+      const nextStatus = subcommand === 'done' ? 'Done' : args.slice(1).join(' ').trim();
+      if (!nextStatus) {
+        await message.reply('Usage: `j$ticket status <text>`');
+        return;
+      }
+
+      ticketMeta.status = String(nextStatus).slice(0, 120);
+      saveTicketsState();
+      await message.reply(`✅ Trade status updated to **${ticketMeta.status}**.`);
+      await postTicketStatusMessage(message.channel, ticketMeta);
+      return;
+    }
+
     if (subcommand === 'add' || subcommand === 'remove') {
       const userId = parseDiscordId(args[1]);
       if (!userId) {
@@ -692,6 +914,11 @@ function setupBotHandlers() {
 
       if (!ticketsState.openTickets[message.channel.id]) {
         await message.reply('This command only works inside an open ticket channel.');
+        return;
+      }
+
+      if (!isSupportStaff(message.member, message.guild.id, message.author.id)) {
+        await message.reply(`❌ Only Support can ${subcommand} users in tickets.`);
         return;
       }
 
@@ -748,17 +975,21 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      const canManage =
-        interaction.user.id === ticketMeta.openerId ||
-        hasAllowedRole(interaction.member, interaction.user.id);
+      const canManage = isSupportStaff(interaction.member, interaction.guildId, interaction.user.id);
 
       if (!canManage) {
-        await interaction.reply({ content: 'You do not have permission to claim this ticket.', ephemeral: true });
+        await interaction.reply({ content: 'Only Support can claim this ticket.', ephemeral: true });
+        return;
+      }
+
+      if (ticketMeta.claimedBy && ticketMeta.claimedBy !== interaction.user.id) {
+        await interaction.reply({ content: `This ticket is already claimed by <@${ticketMeta.claimedBy}>.`, ephemeral: true });
         return;
       }
 
       ticketMeta.claimedBy = interaction.user.id;
       ticketMeta.firstResponseAt = ticketMeta.firstResponseAt || Date.now();
+      ticketMeta.status = 'claimed';
       saveTicketsState();
 
       await interaction.reply({ content: `✅ Ticket claimed by <@${interaction.user.id}>.`, ephemeral: true });
@@ -776,11 +1007,138 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      const channel = await createTicketForUser(interaction.guild, interaction.user.id);
+      const modal = new ModalBuilder()
+        .setCustomId('ticket_open_modal')
+        .setTitle('Open Trade Ticket');
+
+      const tradeTargetInput = new TextInputBuilder()
+        .setCustomId('ticket_trade_target')
+        .setLabel('Username or User ID you are trading with')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('Username, tag, or numeric user ID');
+
+      const tradeDetailsInput = new TextInputBuilder()
+        .setCustomId('ticket_trade_details')
+        .setLabel('What are you trading?')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setPlaceholder('Describe your side of the trade...');
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(tradeTargetInput),
+        new ActionRowBuilder().addComponents(tradeDetailsInput)
+      );
+
+      await interaction.showModal(modal);
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === 'ticket_open_modal') {
+      const config = getTicketConfig(interaction.guildId);
+      if (!config) {
+        await interaction.reply({ content: 'Ticket system is not configured yet.', ephemeral: true });
+        return;
+      }
+
+      const tradeTargetRaw = interaction.fields.getTextInputValue('ticket_trade_target');
+      const tradeDetails = interaction.fields.getTextInputValue('ticket_trade_details');
+
+      if (!String(tradeTargetRaw || '').trim() || !String(tradeDetails || '').trim()) {
+        await interaction.reply({ content: 'Both trade target and trade details are required.', ephemeral: true });
+        return;
+      }
+
+      const match = await findBestTradeMember(interaction.guild, tradeTargetRaw);
+      const channel = await createTicketForUser(interaction.guild, interaction.user.id, {
+        tradeTargetRaw,
+        tradeDetails,
+        tradePartnerId: match && match.confidence.startsWith('exact') ? match.member.id : null,
+        pendingTradePartnerId: match ? match.member.id : null
+      });
+
+      if (match && !channel.permissionsFor(match.member.id)?.has(PermissionFlagsBits.ViewChannel)) {
+        const promptRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`ticket_confirm_target:${match.member.id}`)
+            .setLabel('Yes')
+            .setStyle(ButtonStyle.Primary)
+        );
+
+        await channel.send({
+          content: `<@${interaction.user.id}> is this the right username? ${match.member} (${match.member.user.tag})`,
+          components: [promptRow]
+        });
+      } else if (match && match.member.id) {
+        await channel.permissionOverwrites.edit(match.member.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          ReadMessageHistory: true,
+          AttachFiles: true,
+          EmbedLinks: true
+        });
+      } else {
+        await channel.send('I could not confidently match that user from this server. Support can add them with `j$ticket add <userId>` once verified.');
+      }
+
       await interaction.reply({
         content: `✅ Your ticket is ready: ${channel}`,
         ephemeral: true
       });
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('ticket_confirm_target:')) {
+      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      if (!ticketMeta) {
+        await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
+        return;
+      }
+
+      const targetUserId = interaction.customId.split(':')[1];
+      const isAllowedConfirmer =
+        interaction.user.id === ticketMeta.openerId ||
+        isSupportStaff(interaction.member, interaction.guildId, interaction.user.id);
+
+      if (!isAllowedConfirmer) {
+        await interaction.reply({ content: 'Only the ticket opener or Support can confirm this user.', ephemeral: true });
+        return;
+      }
+
+      await interaction.channel.permissionOverwrites.edit(targetUserId, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+        AttachFiles: true,
+        EmbedLinks: true
+      });
+
+      ticketMeta.tradePartnerId = targetUserId;
+      ticketMeta.pendingTradePartnerId = null;
+      ticketMeta.status = 'user-confirmed';
+      saveTicketsState();
+
+      await interaction.reply({ content: `✅ Added <@${targetUserId}> to the ticket.`, ephemeral: true });
+      await postTicketStatusMessage(interaction.channel, ticketMeta);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === 'ticket_done') {
+      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      if (!ticketMeta) {
+        await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
+        return;
+      }
+
+      if (!isSupportStaff(interaction.member, interaction.guildId, interaction.user.id)) {
+        await interaction.reply({ content: 'Only Support can mark this trade as done.', ephemeral: true });
+        return;
+      }
+
+      ticketMeta.status = 'Done';
+      saveTicketsState();
+      await interaction.reply({ content: '✅ Trade status set to Done.', ephemeral: true });
+      await postTicketStatusMessage(interaction.channel, ticketMeta);
       return;
     }
 
@@ -794,13 +1152,11 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      const canClose =
-        interaction.user.id === ticketMeta.openerId ||
-        hasAllowedRole(interaction.member, interaction.user.id);
+      const canClose = isSupportStaff(interaction.member, interaction.guildId, interaction.user.id);
 
       if (!canClose) {
         await interaction.reply({
-          content: 'You do not have permission to close this ticket.',
+          content: 'Only Support can close this ticket.',
           ephemeral: true
         });
         return;
@@ -829,12 +1185,10 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      const canClose =
-        interaction.user.id === ticketMeta.openerId ||
-        hasAllowedRole(interaction.member, interaction.user.id);
+      const canClose = isSupportStaff(interaction.member, interaction.guildId, interaction.user.id);
 
       if (!canClose) {
-        await interaction.reply({ content: 'You do not have permission to close this ticket.', ephemeral: true });
+        await interaction.reply({ content: 'Only Support can close this ticket.', ephemeral: true });
         return;
       }
 
@@ -1740,6 +2094,18 @@ app.post('/api/tickets/config', (req, res) => {
   });
 
   res.json({ success: true, message: 'Ticket configuration saved', config: getTicketConfig(guildId) });
+});
+
+app.get('/api/tickets/logs', (req, res) => {
+  const guildId = parseDiscordId(req.query.guildId);
+  if (!guildId) {
+    return res.status(400).json({ success: false, message: 'guildId query parameter is required' });
+  }
+
+  res.json({
+    success: true,
+    logs: getTicketLogs(guildId)
+  });
 });
 
 app.post('/api/tickets/panel', async (req, res) => {
