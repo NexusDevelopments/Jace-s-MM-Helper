@@ -277,6 +277,74 @@ function appendTicketLog(guildId, entry) {
   saveTicketsState();
 }
 
+async function resolveTicketLogChannel(guild, config) {
+  const targetIds = [
+    config?.logChannelId,
+    LOG_CHANNEL_ID,
+    DEFAULT_MOVEMENT_LOG_CHANNEL_ID
+  ].filter(Boolean);
+
+  for (const targetId of targetIds) {
+    const channel = await guild.channels.fetch(String(targetId)).catch(() => null);
+    if (channel && channel.isTextBased() && typeof channel.send === 'function') {
+      return channel;
+    }
+  }
+
+  const fallback = guild.channels.cache.find(
+    (channel) => channel.isTextBased() && typeof channel.send === 'function'
+  ) || null;
+  return fallback;
+}
+
+function parseTicketInfoFromChannel(channel) {
+  if (!channel) return null;
+  const ticketMatch = String(channel.name || '').match(/^ticket-(\d{1,8})$/i);
+  if (!ticketMatch) return null;
+  const openerMatch = String(channel.topic || '').match(/Opened by (\d{17,20})/i);
+
+  return {
+    ticketNumber: Number.parseInt(ticketMatch[1], 10),
+    openerId: openerMatch ? openerMatch[1] : null
+  };
+}
+
+function recoverTicketMeta(channel) {
+  if (!channel || !channel.guild) return null;
+  const existing = ticketsState.openTickets[channel.id];
+  if (existing) return existing;
+
+  const parsed = parseTicketInfoFromChannel(channel);
+  if (!parsed || Number.isNaN(parsed.ticketNumber) || !parsed.openerId) return null;
+
+  const recovered = {
+    guildId: channel.guild.id,
+    openerId: parsed.openerId,
+    ticketNumber: parsed.ticketNumber,
+    status: 'Open',
+    priority: 'normal',
+    claimedBy: null,
+    firstResponseAt: null,
+    closeReason: null,
+    tradeDetails: null,
+    tradeTargetRaw: null,
+    tradePartnerId: null,
+    pendingTradePartnerId: null,
+    createdAt: Date.now()
+  };
+
+  ticketsState.openTickets[channel.id] = recovered;
+  appendTicketLog(channel.guild.id, {
+    type: 'recovered',
+    ticketNumber: recovered.ticketNumber,
+    openerId: recovered.openerId,
+    channelId: channel.id,
+    status: 'Recovered'
+  });
+  saveTicketsState();
+  return recovered;
+}
+
 function setTicketTranscript(guildId, ticketNumber, transcriptData) {
   if (!ticketsState.transcripts[guildId]) ticketsState.transcripts[guildId] = {};
   ticketsState.transcripts[guildId][String(ticketNumber)] = transcriptData;
@@ -571,7 +639,7 @@ async function createTicketForUser(guild, userId, options = {}) {
 }
 
 async function closeTicketChannel(channel, closedByTag, closeReason) {
-  const ticketMeta = ticketsState.openTickets[channel.id];
+  const ticketMeta = recoverTicketMeta(channel);
   if (!ticketMeta) {
     throw new Error('This channel is not tracked as an open ticket');
   }
@@ -634,26 +702,22 @@ async function closeTicketChannel(channel, closedByTag, closeReason) {
   });
 
   const config = getTicketConfig(ticketMeta.guildId);
-  const logTargetId = (config && config.logChannelId) || LOG_CHANNEL_ID || DEFAULT_MOVEMENT_LOG_CHANNEL_ID;
+  const logChannel = await resolveTicketLogChannel(channel.guild, config);
+  if (logChannel) {
+    const closeEmbed = new EmbedBuilder()
+      .setColor(LIGHT_BLUE)
+      .setTitle(`Ticket #${ticketMeta.ticketNumber} Closed`)
+      .addFields(
+        { name: 'Ticket channel', value: `${channel.name} (${channel.id})` },
+        { name: 'Opened by', value: `<@${ticketMeta.openerId}> (${ticketMeta.openerId})` },
+        { name: 'Closed by', value: closedByTag || 'Unknown' },
+        { name: 'Priority', value: formatTicketText(ticketMeta.priority, 'Normal'), inline: true },
+        { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true },
+        { name: 'Reason', value: ticketMeta.closeReason || 'No reason provided' }
+      )
+      .setTimestamp();
 
-  if (logTargetId) {
-    const logChannel = await channel.guild.channels.fetch(logTargetId).catch(() => null);
-    if (logChannel && logChannel.isTextBased() && typeof logChannel.send === 'function') {
-      const closeEmbed = new EmbedBuilder()
-        .setColor(LIGHT_BLUE)
-        .setTitle(`Ticket #${ticketMeta.ticketNumber} Closed`)
-        .addFields(
-          { name: 'Ticket channel', value: `${channel.name} (${channel.id})` },
-          { name: 'Opened by', value: `<@${ticketMeta.openerId}> (${ticketMeta.openerId})` },
-          { name: 'Closed by', value: closedByTag || 'Unknown' },
-          { name: 'Priority', value: formatTicketText(ticketMeta.priority, 'Normal'), inline: true },
-          { name: 'Claimed by', value: ticketMeta.claimedBy ? `<@${ticketMeta.claimedBy}>` : 'Unclaimed', inline: true },
-          { name: 'Reason', value: ticketMeta.closeReason || 'No reason provided' }
-        )
-        .setTimestamp();
-
-      await logChannel.send({ embeds: [closeEmbed], files: [transcriptAttachment] });
-    }
+    await logChannel.send({ embeds: [closeEmbed], files: [transcriptAttachment] }).catch(() => null);
   }
 
   delete ticketsState.openTickets[channel.id];
@@ -863,7 +927,7 @@ function setupBotHandlers() {
     }
 
     if (subcommand === 'close') {
-      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      const ticketMeta = recoverTicketMeta(message.channel);
       if (!ticketMeta) {
         await message.reply('This command only works inside an open ticket channel.');
         return;
@@ -884,7 +948,7 @@ function setupBotHandlers() {
     }
 
     if (subcommand === 'claim' || subcommand === 'unclaim') {
-      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      const ticketMeta = recoverTicketMeta(message.channel);
       if (!ticketMeta) {
         await message.reply('This command only works inside an open ticket channel.');
         return;
@@ -922,7 +986,7 @@ function setupBotHandlers() {
     }
 
     if (subcommand === 'priority') {
-      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      const ticketMeta = recoverTicketMeta(message.channel);
       if (!ticketMeta) {
         await message.reply('This command only works inside an open ticket channel.');
         return;
@@ -947,7 +1011,7 @@ function setupBotHandlers() {
     }
 
     if (subcommand === 'status' || subcommand === 'done') {
-      const ticketMeta = ticketsState.openTickets[message.channel.id];
+      const ticketMeta = recoverTicketMeta(message.channel);
       if (!ticketMeta) {
         await message.reply('This command only works inside an open ticket channel.');
         return;
@@ -1035,7 +1099,7 @@ function setupBotHandlers() {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isButton() && interaction.customId === 'ticket_claim') {
-      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      const ticketMeta = recoverTicketMeta(interaction.channel);
       if (!ticketMeta) {
         await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
         return;
@@ -1155,7 +1219,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('ticket_confirm_target:')) {
-      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      const ticketMeta = recoverTicketMeta(interaction.channel);
       if (!ticketMeta) {
         await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
         return;
@@ -1190,7 +1254,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId === 'ticket_done') {
-      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      const ticketMeta = recoverTicketMeta(interaction.channel);
       if (!ticketMeta) {
         await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
         return;
@@ -1209,7 +1273,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId === 'ticket_close') {
-      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      const ticketMeta = recoverTicketMeta(interaction.channel);
       if (!ticketMeta) {
         await interaction.reply({
           content: 'This is not an active ticket channel.',
@@ -1245,7 +1309,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isModalSubmit() && interaction.customId === 'ticket_close_reason_modal') {
-      const ticketMeta = ticketsState.openTickets[interaction.channelId];
+      const ticketMeta = recoverTicketMeta(interaction.channel);
       if (!ticketMeta) {
         await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true });
         return;
@@ -1262,6 +1326,10 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.reply({ content: 'Closing ticket...', ephemeral: true });
       await closeTicketChannel(interaction.channel, interaction.user.tag, closeReason || null);
       return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === 'ticket_close_reason_modal') {
+      // handled above
     }
 
     if (interaction.isButton() && interaction.customId === 'demo_paste_ids') {
@@ -1670,6 +1738,33 @@ client.on('interactionCreate', async (interaction) => {
       }).catch(() => null);
     }
   }
+  });
+
+  client.on('channelDelete', (channel) => {
+    try {
+      const ticketMeta = ticketsState.openTickets[channel.id] || null;
+      const parsed = parseTicketInfoFromChannel(channel);
+      const ticketNumber = ticketMeta?.ticketNumber || parsed?.ticketNumber || null;
+      const openerId = ticketMeta?.openerId || parsed?.openerId || null;
+
+      if (!ticketNumber) return;
+
+      appendTicketLog(channel.guild?.id || ticketMeta?.guildId || 'unknown', {
+        type: 'deleted',
+        ticketNumber,
+        openerId,
+        channelId: channel.id,
+        status: 'Deleted',
+        closeReason: 'Ticket channel deleted'
+      });
+
+      if (ticketsState.openTickets[channel.id]) {
+        delete ticketsState.openTickets[channel.id];
+        saveTicketsState();
+      }
+    } catch (deleteError) {
+      console.error('Channel delete ticket cleanup error:', deleteError);
+    }
   });
 }
 

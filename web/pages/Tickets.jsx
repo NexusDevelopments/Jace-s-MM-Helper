@@ -10,6 +10,8 @@ const DEFAULT_FORM = {
   panelTitle: 'Support Tickets',
   panelDescription: 'Need help? Click Open Ticket and our team will assist you.'
 };
+const TICKETS_LAST_GUILD_KEY = 'tickets:lastGuildId';
+const TICKETS_LAST_FORM_KEY = 'tickets:lastForm';
 
 function Tickets() {
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,23 @@ function Tickets() {
 
   useEffect(() => {
     const init = async () => {
-      const lastGuildId = localStorage.getItem('tickets:lastGuildId') || '';
+      const savedFormRaw = localStorage.getItem(TICKETS_LAST_FORM_KEY);
+      if (savedFormRaw) {
+        try {
+          const parsedForm = JSON.parse(savedFormRaw);
+          if (parsedForm && typeof parsedForm === 'object') {
+            setForm((prev) => ({
+              ...prev,
+              ...DEFAULT_FORM,
+              ...parsedForm
+            }));
+          }
+        } catch {
+          // ignore invalid cache
+        }
+      }
+
+      const lastGuildId = localStorage.getItem(TICKETS_LAST_GUILD_KEY) || '';
       if (lastGuildId) {
         setForm((prev) => ({ ...prev, guildId: lastGuildId }));
         await loadConfigForGuild(lastGuildId);
@@ -59,8 +77,10 @@ function Tickets() {
   useEffect(() => {
     const guildId = String(form.guildId || '').trim();
     if (guildId) {
-      localStorage.setItem('tickets:lastGuildId', guildId);
+      localStorage.setItem(TICKETS_LAST_GUILD_KEY, guildId);
     }
+
+    localStorage.setItem(TICKETS_LAST_FORM_KEY, JSON.stringify(form));
 
     const timer = setTimeout(() => {
       loadConfigForGuild(guildId);
